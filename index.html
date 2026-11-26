@@ -1020,10 +1020,10 @@ function inspect(img){
   t.shape=sf;
   t.hueRank=Object.entries(cnt).filter(([k,v])=>!['black','white','grey'].includes(k)&&v/N>0.05).sort((a,b)=>b[1]-a[1]).map(([k])=>k);
   const detail=(dh+dv)/2;
-  t.flow   = sf.coh>0.6 && sf.R>0.15 && sf.R<0.85 && sf.lined>0.6 && !t.minimal;           // ribbons, waves, folds
-  t.swirl  = sf.coh>0.6 && sf.R<=0.15 && sf.lined>0.6 && !t.minimal;                         // lines turning every way: swirls, rings
+  t.flow   = sf.coh>0.5 && sf.R>0.12 && sf.R<0.88 && sf.lined>0.5 && !t.minimal;           // ribbons, waves, folds
+  t.swirl  = sf.coh>0.5 && sf.R<=0.12 && sf.lined>0.5 && !t.minimal;                         // lines turning every way: swirls, rings
   t.pattern= sf.coh<0.5 && (t.busy || (t.many && detail>0.02));                               // dots, rosettes, blobs
-  t.glossy = sf.gloss>0.006 && sf.coh>0.6 && !t.mono;                                        // wet-looking highlights on lines
+  t.glossy = sf.gloss>0.005 && sf.coh>0.5 && !t.mono;                                        // wet-looking highlights on lines
   if(t.flow||t.swirl){ t.bandsH=false; t.bandsV=false; }   // waves are not glitch bands
   t._dbg={dh,dv,sym,meanS,colourfulness,contrast,symr:sym/contrast,centre,outer};
   t.style = t.flow||t.swirl||t.pattern||t.tunnel ? 'abstract' : t.bandsH||t.bandsV ? 'glitch' : t.symmetric ? 'generative' : (t.mono&&!t.busy)||(!t.vivid&&!t.minimal&&!t.many) ? 'photo' : 'abstract';
