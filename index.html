@@ -162,7 +162,12 @@ textarea{width:100%;min-height:170px;background:var(--chip);border:0;border-radi
       <div class="row"><label>Subject</label><div class="chips" id="subjectChips"></div></div>
       <div class="row"><label>Title</label><input type="text" id="capTitle" placeholder="Untitled" maxlength="60"></div>
       <div id="titleSugWrap" hidden><div class="chips" id="titleSug" style="margin:6px 0;flex-wrap:wrap;padding:0"></div>
-        <div class="btnrow" style="margin-top:0"><button class="chip" id="titleMore">More title ideas</button><button class="chip" id="gptPrompt">Copy prompt for ChatGPT</button></div></div>
+        <div class="btnrow" style="margin-top:0"><button class="chip" id="aiTitles" aria-pressed="true">✦ AI titles (Gemini)</button><button class="chip" id="titleMore">More title ideas</button><button class="chip" id="gptPrompt">Copy prompt for ChatGPT</button></div>
+        <div id="aiKeyBox" hidden style="background:#15151a;border-radius:10px;padding:10px 12px;margin-bottom:8px">
+          <div class="hint" style="margin-top:0">AI titles use Google's Gemini, which is free with daily limits. Get a key at <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener" style="color:var(--accent2)">aistudio.google.com/apikey</a> (sign in with Google, then tap "Create API key"), and paste it here. It's saved only on this device. When you use it, the picture is sent to Google, and on the free tier Google may use it to improve its products.</div>
+          <div class="row"><input type="text" id="aiKey" placeholder="Paste your Gemini API key" autocomplete="off" style="width:100%"></div>
+          <div class="btnrow"><button class="chip" id="aiKeySave" aria-pressed="true">Save key and get titles</button><button class="chip" id="aiKeyForget">Forget key</button></div>
+        </div></div>
       <div class="row"><label>Style</label><div class="chips" id="capStyleChips"></div></div>
       <div class="row"><label>Made with</label><div class="chips" id="capAppChips"></div></div>
       <div class="row"><label>Mood (optional)</label><input type="text" id="capMood" placeholder="e.g. late night signal noise" maxlength="80"></div>
@@ -1234,6 +1239,8 @@ function setLookLine(){
 function showTitleIdeas(){
   if(!LOOK){ $('titleSugWrap').hidden=true; return; }
   const box=$('titleSug'); box.innerHTML='';
+  if(LOOK.ai) for(const o of LOOK.ai.titles){ const b=document.createElement('button'); b.className='chip'; b.textContent='✦ '+o.title; b.style.border='1px solid var(--accent2)';
+    b.onclick=()=>{ state.title=o.title; TITLE_SPACE={title:o.title,space:null,line:o.line}; $('capTitle').value=o.title; $('title').value=o.title; persist(); buildCaption(); refresh(); }; box.appendChild(b); }
   for(const o of titleIdeas(LOOK,rng(titleSeed))){ const t=o.t, b=document.createElement('button'); b.className='chip'; b.textContent=t;
     b.onclick=()=>{ state.title=t; TITLE_SPACE={title:t,space:o.space}; $('capTitle').value=t; $('title').value=t; persist(); buildCaption(); refresh(); }; box.appendChild(b); }
   $('titleSugWrap').hidden=false;
@@ -1297,6 +1304,7 @@ function buildTags(r){
   const take=(list,n)=>{ const fresh=shuffle(list.filter(t=>!recent.has(t)&&!out.includes(t)),r), old=shuffle(list.filter(t=>recent.has(t)&&!out.includes(t)),r);
     out.push(...fresh.concat(old).slice(0,n)); };
   const subj=subjectOf(LOOK);
+  if(LOOK && LOOK.ai && LOOK.ai.hashtags.length){ out.push(...LOOK.ai.hashtags.filter(t=>!out.includes(t)).slice(0,left())); if(!left()) return out.slice(0,5); }
   if(LOOK && subj!=='art'){ take(PHOTO_TAGS[subj],2); if(state.capCta==='prints'&&left()>0) take(TAGS.prints,1);
     if(left()>0) take(pt.colour.length?pt.colour:TAGS.photo,1); while(left()>0){ const b=out.length; take(TAGS.photo,1); if(out.length===b) break; }
     return out.slice(0,5); }
@@ -1318,7 +1326,9 @@ function buildCaption(){
   const space = TITLE_SPACE && TITLE_SPACE.title===title ? TITLE_SPACE.space : null;
   let opener;
   const subj=subjectOf(LOOK);
-  if(LOOK && subj!=='art') opener=pick(PHOTO_LINES[subj](LOOK),r);
+  const aiLine = TITLE_SPACE && TITLE_SPACE.title===title ? TITLE_SPACE.line : null;
+  if(aiLine) opener=aiLine;
+  else if(LOOK && subj!=='art') opener=pick(PHOTO_LINES[subj](LOOK),r);
   else if(LOOK && space && r()<0.3) opener = describeLine(space, LOOK, r);
   else if(LOOK) opener = seeLine(LOOK, r);
   else opener = tl.length && r()<0.6 ? pick(tl,r) : pick(OPENERS[state.capStyle],r);
@@ -1360,6 +1370,53 @@ $('capTitle').value=state.title; $('capTitle').oninput=e=>{ state.title=e.target
 $('title').addEventListener('input',()=>{ $('capTitle').value=state.title; buildCaption(); });
 $('sigText').addEventListener('input',buildCaption);
 $('capMood').value=state.capMood; $('capMood').oninput=e=>{ state.capMood=e.target.value; capRefresh(); };
+/* ---------- AI titles with Google Gemini (optional, user's own free key, stored only on this device) ---------- */
+const GEMINI_MODELS=['gemini-flash-latest','gemini-2.5-flash','gemini-2.0-flash'];
+function aiKey(){ try{ return localStorage.getItem('nw-gemini-key')||''; }catch(e){ return ''; } }
+function aiPrompt(){
+  const app=state.capApp!=='none'?state.capApp:null, name=(state.sigText||'Nowhingness').trim();
+  return `You are naming an artwork by the digital artist ${name}${app?` (made on a phone with the app ${app})`:''}.
+Look closely at the image: the shapes, motion, texture, surface, colours and mood. If it is a photo, note who or what is in it.
+Return JSON only, in this shape: {"titles":[{"title":"...","line":"..."}],"hashtags":["#...","#...","#..."]}
+- 6 titles, 2 to 4 words each, evocative and specific to what is visible, in the spirit of "Rosette Passage" (a concrete motif plus a place or feeling). No generic words like "Abstract", "Untitled", "Art", "Dream".
+- For each title, "line" is one caption sentence in this style: "A corridor built from color, pattern, and noise." Keep it under 15 words, no emojis, no hashtags.
+- 3 Instagram hashtags that are specific to this image (lowercase, no spaces). Do not include #${name.toLowerCase().replace(/[^a-z0-9_]/g,'')}${app?` or #${app.toLowerCase()}`:''}.`;
+}
+async function aiTitles(){
+  if(!ART){ toast('Pick a piece first'); return; }
+  const key=aiKey(); if(!key){ $('aiKeyBox').hidden=false; $('aiKey').focus(); return; }
+  const look=LOOK; busy(true); $('busy').textContent='Asking Gemini…';
+  try{
+    const c=shrink(ART.img,ART.w,ART.h,768), b64=c.toDataURL('image/jpeg',0.85).split(',')[1];
+    const body={contents:[{parts:[{text:aiPrompt()},{inline_data:{mime_type:'image/jpeg',data:b64}}]}],
+                generationConfig:{responseMimeType:'application/json',temperature:1.0}};
+    let res, lastErr='';
+    for(const m of GEMINI_MODELS){
+      const r=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${m}:generateContent`,{method:'POST',
+        headers:{'Content-Type':'application/json','x-goog-api-key':key},body:JSON.stringify(body)});
+      if(r.ok){ res=await r.json(); break; }
+      const err=await r.json().catch(()=>({})); lastErr=(err.error&&err.error.message)||('HTTP '+r.status);
+      if(r.status===400||r.status===401||r.status===403||r.status===429) break;   // bad key or limit: other models won't help
+    }
+    if(!res) throw new Error(lastErr||'No answer');
+    const txt=res.candidates?.[0]?.content?.parts?.map(p=>p.text||'').join('')||'';
+    const data=JSON.parse(txt.replace(/^```(json)?|```$/g,'').trim());
+    const titles=(data.titles||[]).filter(o=>o&&o.title).slice(0,6).map(o=>({title:String(o.title).trim(),line:String(o.line||'').trim()}));
+    const hashtags=(data.hashtags||[]).map(h=>'#'+String(h).replace(/^#/,'').toLowerCase().replace(/[^a-z0-9_]/g,'')).filter(h=>h.length>2).slice(0,3);
+    if(!titles.length) throw new Error('Empty answer');
+    if(LOOK===look){ look.ai={titles,hashtags}; showTitleIdeas(); buildCaption(); toast('AI titles ready'); }
+  }catch(e){
+    console.warn(e); const m=String(e.message||e);
+    toast(/API key|API_KEY|permission|401|403/i.test(m)?'Gemini did not accept the key. Check it and paste again.':/quota|429|exhausted/i.test(m)?'Gemini free limit reached. Try again later.':'Gemini did not answer: '+m.slice(0,80));
+    if(/API key|API_KEY|401|403/i.test(m)) $('aiKeyBox').hidden=false;
+  }
+  busy(false); $('busy').textContent='Rendering…';
+}
+$('aiTitles').onclick=aiTitles;
+$('aiKeySave').onclick=()=>{ const k=$('aiKey').value.trim(); if(!k){ toast('Paste the key first'); return; }
+  try{ localStorage.setItem('nw-gemini-key',k); }catch(e){ toast('Could not save the key on this device'); return; }
+  $('aiKey').value=''; $('aiKeyBox').hidden=true; aiTitles(); };
+$('aiKeyForget').onclick=()=>{ try{ localStorage.removeItem('nw-gemini-key'); }catch(e){} toast('Key removed from this device'); };
 $('gptPrompt').onclick=()=>{
   const app=state.capApp!=='none'?state.capApp:null, name=(state.sigText||'Nowhingness').trim();
   const seen=LOOK?describe(LOOK):'';
