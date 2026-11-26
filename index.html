@@ -106,10 +106,12 @@ input[type=range]{width:55%;accent-color:var(--accent)}
   <section>
     <h2>Look</h2>
     <div class="panel">
-      <div class="row" data-for="frame,poster,gallery,desk"><label>Wall / desk</label><div class="chips" id="wallChips"></div></div>
+      <div class="row"><label>Art size</label><input type="range" id="artSize" min="0.7" max="1.25" step="0.01"></div>
+      <div class="row" data-for="frame,poster,gallery,desk,laptop"><label>Wall / desk</label><div class="chips" id="wallChips"></div></div>
       <div class="row" data-for="frame,dark"><label>Frame</label><div class="chips" id="frameChips"></div></div>
       <div class="row" data-for="clean"><label>Border colour</label><div class="chips" id="borderChips"></div></div>
-      <div class="row" data-for="phone"><label>Tilt phone</label><label class="switch"><input type="checkbox" id="tilt"><span></span></label></div>
+      <div class="row" data-for="phone,tablet,laptop,monitor"><label>Fill the screen (crops art)</label><label class="switch"><input type="checkbox" id="fill"><span></span></label></div>
+      <div class="row" data-for="phone,tablet"><label>Tilt device</label><label class="switch"><input type="checkbox" id="tilt"><span></span></label></div>
       <div class="row" data-for="gallery"><label>Title on label</label><input type="text" id="title" placeholder="Untitled" maxlength="40"></div>
     </div>
   </section>
@@ -168,10 +170,10 @@ const FORMATS = {
 };
 const SCENES = [
   ['frame','Framed on wall'],['dark','Dark room glow'],['phone','Phone screen'],
-  ['gallery','Gallery'],['poster','Taped poster'],['desk','Desk print'],['clean','Clean border']
+  ['gallery','Gallery'],['poster','Taped poster'],['desk','Desk print'],['tablet','Tablet'],['laptop','Laptop'],['monitor','Desktop monitor'],['clean','Clean border']
 ];
 const DEFAULTS = {scene:'frame',format:'ig45',wall:'auto',frame:'black',border:'auto',tilt:true,
-  title:'',sig:true,sigText:'Nowhingness',sigStyle:'caps',sigPos:'br',zoom:2.5,focus:{x:.5,y:.5}};
+  title:'',artSize:1,fill:false,sig:true,sigText:'Nowhingness',sigStyle:'caps',sigPos:'br',zoom:2.5,focus:{x:.5,y:.5}};
 let state = Object.assign({}, DEFAULTS);
 try{ const s = JSON.parse(localStorage.getItem('nw-mockup-settings')||'null'); if(s) Object.assign(state, s, {focus:{x:.5,y:.5}}); }catch(e){}
 function persist(){ try{ const {focus, ...rest} = state; localStorage.setItem('nw-mockup-settings', JSON.stringify(rest)); }catch(e){} }
@@ -245,6 +247,29 @@ function drawCover(ctx,img,iw,ih,x,y,w,h,fx=.5,fy=.5,zoom=1){
   ctx.drawImage(img,sx,sy,sw,sh,x,y,w,h);
 }
 function art(ctx,x,y,w,h){ctx.drawImage(ART.img,x,y,w,h);}
+/* scale a layout fraction by the Art size slider, capped so things stay on the canvas */
+const K=(f,cap=0.97)=>Math.min(cap,f*state.artSize);
+/* fill a device screen: blurred art behind, then the art (contained, or covering if Fill screen is on / aspect is close) */
+function screenArt(ctx,sx,sy,sw,sh,sr){
+  ctx.save(); rrect(ctx,sx,sy,sw,sh,sr); ctx.clip();
+  ctx.drawImage(ART.small,sx-sw*0.1,sy-sh*0.1,sw*1.2,sh*1.2);
+  ctx.fillStyle='rgba(0,0,0,.35)'; ctx.fillRect(sx,sy,sw,sh);
+  const ar=ART.w/ART.h, sar=sw/sh;
+  if(state.fill || Math.abs(ar-sar)/sar<0.18) drawCover(ctx,ART.img,ART.w,ART.h,sx,sy,sw,sh);
+  else { const r=fit(ART.w,ART.h,sw*0.97,sh*0.94); art(ctx,sx+(sw-r.w)/2,sy+(sh-r.h)/2,r.w,r.h); }
+  const gl=ctx.createLinearGradient(sx,sy,sx+sw,sy+sh*0.6); gl.addColorStop(0,'rgba(255,255,255,.12)'); gl.addColorStop(.45,'rgba(255,255,255,0)');
+  ctx.fillStyle=gl; ctx.fillRect(sx,sy,sw,sh);
+  ctx.restore();
+}
+function paletteBackdrop(ctx,W,H){
+  const p=ART.pal, c1=mix(p.vivid,[10,10,14],.35), c2=mix(p.vivid2,[10,10,14],.55);
+  let g=ctx.createLinearGradient(0,0,W,H); g.addColorStop(0,rgb(c1)); g.addColorStop(1,rgb(c2));
+  ctx.fillStyle=g; ctx.fillRect(0,0,W,H);
+  ctx.save(); ctx.globalAlpha=.45; ctx.drawImage(ART.tiny,-W*0.1,-H*0.1,W*1.2,H*1.2); ctx.restore();
+  g=ctx.createRadialGradient(W/2,H/2,0,W/2,H/2,Math.hypot(W,H)*.6); g.addColorStop(0,'rgba(0,0,0,0)'); g.addColorStop(1,'rgba(0,0,0,.45)');
+  ctx.fillStyle=g; ctx.fillRect(0,0,W,H);
+  noise(ctx,W,H,.07);
+}
 
 function signature(ctx,W,H,color,opts={}){
   if(!state.sig || !state.sigText.trim()) return;
@@ -278,7 +303,7 @@ function frameFill(ctx,frame,x,y,w,h){
 /* framed artwork with optional mat; returns outer rect */
 function framed(ctx,W,H,cx,cy,maxW,maxH,frame,opts={}){
   const u=Math.min(W,H);
-  const fw = frame==='none'?0:u*0.02, mw = frame==='none'||opts.noMat?0:u*0.055;
+  const fw = frame==='none'?0:u*0.016, mw = frame==='none'||opts.noMat?0:u*0.035;
   const r=fit(ART.w,ART.h,maxW-2*(fw+mw),maxH-2*(fw+mw));
   const ow=r.w+2*(fw+mw), oh=r.h+2*(fw+mw), ox=cx-ow/2, oy=cy-oh/2;
   ctx.save();
@@ -326,13 +351,13 @@ const DRAW = {
     ctx.fillStyle=rgb(mix(wall,[255,255,255],.35)); ctx.fillRect(0,wallH-H*0.018,W,H*0.018);
     ctx.fillStyle='rgba(0,0,0,.12)'; ctx.fillRect(0,wallH,W,H*0.004);
     wallLight(ctx,W,H); noise(ctx,W,H,.06);
-    framed(ctx,W,H,W/2,wallH*0.48,W*(H/W>1.5?0.8:0.62),wallH*0.7,state.frame);
+    framed(ctx,W,H,W/2,wallH*0.49,W*K(H/W>1.5?0.9:0.8),wallH*K(0.86,0.92),state.frame);
     signature(ctx,W,H,sigOn(wall),{y:wallH-H*0.035});
   },
   dark(ctx,W,H){
     const bg=[9,9,11]; ctx.fillStyle=rgb(bg); ctx.fillRect(0,0,W,H);
-    const u=Math.min(W,H), r=fit(ART.w,ART.h,W*0.6,H*0.58);
-    const cx=W/2, cy=H*0.43, x=cx-r.w/2, y=cy-r.h/2;
+    const u=Math.min(W,H), r=fit(ART.w,ART.h,W*K(0.78,0.9),H*K(0.68,0.74));
+    const cx=W/2, cy=Math.max(H*0.42, r.h/2+H*0.05), x=cx-r.w/2, y=cy-r.h/2;
     // colour glow spilling from the art
     ctx.save(); ctx.globalAlpha=1; ctx.drawImage(ART.glow,cx-r.w*1.25,cy-r.h*1.25,r.w*2.5,r.h*2.5);
     ctx.globalAlpha=.8; ctx.drawImage(ART.glow,cx-r.w,cy-r.h,r.w*2,r.h*2); ctx.restore();
@@ -355,19 +380,13 @@ const DRAW = {
     signature(ctx,W,H,'rgba(255,255,255,.7)');
   },
   phone(ctx,W,H){
-    const p=ART.pal, u=Math.min(W,H), wide=W/H>1.3;
-    const c1=mix(p.vivid,[10,10,14],.35), c2=mix(p.vivid2,[10,10,14],.55);
-    let g=ctx.createLinearGradient(0,0,W,H); g.addColorStop(0,rgb(c1)); g.addColorStop(1,rgb(c2));
-    ctx.fillStyle=g; ctx.fillRect(0,0,W,H);
-    ctx.save(); ctx.globalAlpha=.45; ctx.drawImage(ART.tiny,-W*0.1,-H*0.1,W*1.2,H*1.2); ctx.restore();
-    g=ctx.createRadialGradient(W/2,H/2,0,W/2,H/2,Math.hypot(W,H)*.6); g.addColorStop(0,'rgba(0,0,0,0)'); g.addColorStop(1,'rgba(0,0,0,.45)');
-    ctx.fillStyle=g; ctx.fillRect(0,0,W,H);
-    noise(ctx,W,H,.07);
-    let ph=H*(wide?0.84:0.74), pw=ph*0.49;
-    if(pw>W*(wide?0.32:0.6)){pw=W*(wide?0.32:0.6); ph=pw/0.49;}
+    const u=Math.min(W,H), wide=W/H>1.3;
+    paletteBackdrop(ctx,W,H);
+    let ph=H*K(wide?0.88:0.86,0.92), pw=ph*0.49;
+    if(pw>W*K(wide?0.34:0.7,0.8)){pw=W*K(wide?0.34:0.7,0.8); ph=pw/0.49;}
     const pcx = wide? W*0.7 : W/2, pcy=H*0.5;
     if(wide){ // print of the art beside the phone
-      const r=fit(ART.w,ART.h,W*0.4,H*0.72), ax=W*0.3-r.w/2, ay=H/2-r.h/2;
+      const r=fit(ART.w,ART.h,W*0.46,H*K(0.8,0.88)), ax=W*0.3-r.w/2, ay=H/2-r.h/2;
       ctx.save(); shadow(ctx,u*0.05,0,u*0.025,'rgba(0,0,0,.5)'); ctx.fillStyle='#fff'; const b=u*0.015;
       ctx.fillRect(ax-b,ay-b,r.w+2*b,r.h+2*b); noShadow(ctx); art(ctx,ax,ay,r.w,r.h); ctx.restore();
     }
@@ -382,16 +401,7 @@ const DRAW = {
     ctx.fillStyle='#050506'; rrect(ctx,x+pw*0.012,y+pw*0.012,pw-pw*0.024,ph-pw*0.024,R*0.94); ctx.fill();
     // screen
     const ins=pw*0.04, sx=x+ins, sy=y+ins, sw=pw-2*ins, sh=ph-2*ins, sr=R*0.8;
-    ctx.save(); rrect(ctx,sx,sy,sw,sh,sr); ctx.clip();
-    ctx.drawImage(ART.small,sx-sw*0.1,sy-sh*0.1,sw*1.2,sh*1.2);
-    ctx.fillStyle='rgba(0,0,0,.35)'; ctx.fillRect(sx,sy,sw,sh);
-    const ar=ART.w/ART.h, sar=sw/sh;
-    if(Math.abs(ar-sar)/sar<0.18) drawCover(ctx,ART.img,ART.w,ART.h,sx,sy,sw,sh);
-    else { const r=fit(ART.w,ART.h,sw*0.94,sh*0.8); art(ctx,sx+(sw-r.w)/2,sy+(sh-r.h)/2,r.w,r.h); }
-    // glass reflection
-    const gl=ctx.createLinearGradient(sx,sy,sx+sw,sy+sh*0.6); gl.addColorStop(0,'rgba(255,255,255,.14)'); gl.addColorStop(.45,'rgba(255,255,255,0)');
-    ctx.fillStyle=gl; ctx.fillRect(sx,sy,sw,sh);
-    ctx.restore();
+    screenArt(ctx,sx,sy,sw,sh,sr);
     // camera pill
     ctx.fillStyle='#000'; rrect(ctx,-pw*0.15,sy+ph*0.018,pw*0.3,pw*0.085,pw*0.0425); ctx.fill();
     ctx.restore();
@@ -412,7 +422,7 @@ const DRAW = {
     ctx.fillStyle='#2b2420'; ctx.fillRect(bx+bw*0.06,by+bh,u*0.018,u*0.11); ctx.fillRect(bx+bw*0.94-u*0.018,by+bh,u*0.018,u*0.11);
     const bg=ctx.createLinearGradient(0,by,0,by+bh); bg.addColorStop(0,'#6b5141'); bg.addColorStop(1,'#3f2f25'); ctx.fillStyle=bg; ctx.fillRect(bx,by,bw,bh);
     // art as canvas print (no frame) with label
-    const r=framed(ctx,W,H,W*0.47,floorY*0.46,W*0.6,floorY*0.66,'none');
+    const r=framed(ctx,W,H,W*0.46,floorY*0.48,W*K(0.72,0.78),floorY*K(0.82,0.88),'none');
     // depth edge
     ctx.fillStyle='rgba(0,0,0,.25)'; ctx.fillRect(r.x+r.w,r.y+u*0.003,u*0.006,r.h);
     // wall label
@@ -431,7 +441,7 @@ const DRAW = {
       g.addColorStop(0,`rgba(0,0,0,${0.04+R()*0.06})`); g.addColorStop(1,'rgba(0,0,0,0)'); ctx.fillStyle=g; ctx.fillRect(0,0,W,H); }
     noise(ctx,W,H,.22); noise(ctx,W,H,.08,'multiply');
     wallLight(ctx,W,H,.25);
-    const r=fit(ART.w,ART.h,W*0.64,H*0.68), b=u*0.022, pw=r.w+2*b, ph=r.h+2*b;
+    const r=fit(ART.w,ART.h,W*K(0.8,0.86),H*K(0.8,0.86)), b=u*0.02, pw=r.w+2*b, ph=r.h+2*b;
     ctx.save(); ctx.translate(W/2,H*0.48); ctx.rotate(-1.4*Math.PI/180);
     shadow(ctx,u*0.025,u*0.006,u*0.014,'rgba(0,0,0,.4)'); ctx.fillStyle='#f7f6f2'; ctx.fillRect(-pw/2,-ph/2,pw,ph); noShadow(ctx);
     art(ctx,-r.w/2,-r.h/2,r.w,r.h);
@@ -459,7 +469,7 @@ const DRAW = {
     ctx.fillStyle='rgba(0,0,0,.25)'; for(const k of [0.33,0.71]) ctx.fillRect(0,H*k,W,u*0.003);
     noise(ctx,W,H,.12);
     // print
-    const r=fit(ART.w,ART.h,W*0.6,H*0.62), b=u*0.03, pw=r.w+2*b, ph=r.h+2*b;
+    const r=fit(ART.w,ART.h,W*K(0.76,0.84),H*K(0.76,0.84)), b=u*0.025, pw=r.w+2*b, ph=r.h+2*b;
     ctx.save(); ctx.translate(W/2,H/2); ctx.rotate(2.5*Math.PI/180);
     shadow(ctx,u*0.03,u*0.01,u*0.018,'rgba(0,0,0,.45)'); ctx.fillStyle='#faf9f6'; ctx.fillRect(-pw/2,-ph/2,pw,ph); noShadow(ctx);
     art(ctx,-r.w/2,-r.h/2,r.w,r.h); ctx.restore();
@@ -491,12 +501,100 @@ const DRAW = {
     ctx.restore();
     signature(ctx,W,H,'rgba(255,255,255,.8)',{pos:state.sigPos==='br'?'bc':state.sigPos});
   },
+  tablet(ctx,W,H){
+    const u=Math.min(W,H); paletteBackdrop(ctx,W,H);
+    const portrait = ART.h>=ART.w*0.95;     // tablet turns to match the art
+    const asp = portrait? 0.75 : 1/0.75;                 // outer w/h
+    let tw=W*K(portrait?0.78:0.82,0.9), th=tw/asp;
+    if(th>H*K(0.84,0.9)){ th=H*K(0.84,0.9); tw=th*asp; }
+    ctx.save(); ctx.translate(W/2,H/2); if(state.tilt) ctx.rotate(-4*Math.PI/180);
+    const x=-tw/2, y=-th/2, Rr=Math.min(tw,th)*0.06;
+    shadow(ctx,u*0.07,u*0.02,u*0.04,'rgba(0,0,0,.55)');
+    const bg=ctx.createLinearGradient(x,y,x+tw,y+th); bg.addColorStop(0,'#6a6a70'); bg.addColorStop(.5,'#2a2a2e'); bg.addColorStop(1,'#55555b');
+    ctx.fillStyle=bg; rrect(ctx,x,y,tw,th,Rr); ctx.fill(); noShadow(ctx);
+    const e=Math.min(tw,th)*0.008; ctx.fillStyle='#0a0a0b'; rrect(ctx,x+e,y+e,tw-2*e,th-2*e,Rr*0.92); ctx.fill();
+    const bz=Math.min(tw,th)*0.045; screenArt(ctx,x+bz,y+bz,tw-2*bz,th-2*bz,Rr*0.45);
+    ctx.fillStyle='#1c1c20'; ctx.beginPath(); ctx.arc(portrait?0:x+bz/2, portrait?y+bz/2:0, bz*0.13,0,Math.PI*2); ctx.fill();
+    ctx.restore();
+    // stylus lying beside
+    ctx.save(); const L=Math.min(W,H)*0.5, T=u*0.016;
+    ctx.translate(W*0.5, Math.min(H-u*0.05, H/2+th/2+u*0.05)); ctx.rotate(-4*Math.PI/180);
+    shadow(ctx,u*0.012,u*0.004,u*0.008,'rgba(0,0,0,.45)'); ctx.fillStyle='#f1f1f1'; rrect(ctx,-L/2,-T/2,L,T,T/2); ctx.fill(); noShadow(ctx);
+    ctx.fillStyle='rgba(0,0,0,.12)'; ctx.fillRect(-L/2+T,0,L-2*T,T/2);
+    ctx.fillStyle='#d8d8d8'; ctx.beginPath(); ctx.moveTo(L/2-T*0.2,-T/2); ctx.lineTo(L/2+T*1.4,0); ctx.lineTo(L/2-T*0.2,T/2); ctx.fill();
+    ctx.restore();
+    signature(ctx,W,H,'rgba(255,255,255,.85)');
+  },
+  laptop(ctx,W,H){
+    const u=Math.min(W,H), wall=wallColor(), deskY=H*(W/H>1.3?0.8:0.68);
+    ctx.fillStyle=rgb(wall); ctx.fillRect(0,0,W,deskY);
+    wallLight(ctx,W,deskY,.3);
+    // desk top
+    const dg=ctx.createLinearGradient(0,deskY,0,H); dg.addColorStop(0,'#cdb79c'); dg.addColorStop(1,'#a88d70');
+    ctx.fillStyle=dg; ctx.fillRect(0,deskY,W,H-deskY); ctx.fillStyle='rgba(255,255,255,.35)'; ctx.fillRect(0,deskY,W,u*0.003);
+    noise(ctx,W,H,.06);
+    // laptop: lid 16:10 screen, base below
+    let lw=W*K(W/H>1.3?0.66:0.92,0.96), lh=lw*0.66;
+    if(lh>deskY*K(0.82,0.9)){ lh=deskY*K(0.82,0.9); lw=lh/0.66; }
+    const lx=W/2-lw/2, ly=deskY-lh+u*0.004, Rr=lw*0.025;
+    ctx.save(); shadow(ctx,u*0.05,0,u*0.02,'rgba(0,0,0,.3)');
+    ctx.fillStyle='#1a1a1d'; rrect(ctx,lx,ly,lw,lh,Rr); ctx.fill(); noShadow(ctx);
+    ctx.strokeStyle='#5e5e64'; ctx.lineWidth=u*0.003; rrect(ctx,lx,ly,lw,lh,Rr); ctx.stroke();
+    const bz=lw*0.028; screenArt(ctx,lx+bz,ly+bz,lw-2*bz,lh-bz*2.2,Rr*0.3);
+    ctx.fillStyle='#000'; rrect(ctx,W/2-lw*0.05,ly,lw*0.1,bz*0.75,bz*0.3); ctx.fill();
+    // base (front edge)
+    const bw=lw*1.12, bh=lw*0.022, bx=W/2-bw/2, by=deskY;
+    shadow(ctx,u*0.03,0,u*0.012,'rgba(0,0,0,.35)');
+    const bgd=ctx.createLinearGradient(0,by,0,by+bh); bgd.addColorStop(0,'#d9d9dc'); bgd.addColorStop(1,'#8d8d92');
+    ctx.fillStyle=bgd; rrect(ctx,bx,by-bh*0.2,bw,bh,bh*0.5); ctx.fill(); noShadow(ctx);
+    ctx.fillStyle='#77777c'; rrect(ctx,W/2-lw*0.08,by-bh*0.2,lw*0.16,bh*0.4,bh*0.2); ctx.fill();
+    ctx.restore();
+    // mug on the desk
+    const mw=u*0.075, mh=u*0.09, mx=Math.min(W-mw-u*0.04, bx+bw+u*0.05), my=Math.min(H-u*0.04, deskY+(H-deskY)*0.55)-mh;
+    if(mx>bx+bw){ ctx.save(); shadow(ctx,u*0.02,0,u*0.01,'rgba(0,0,0,.3)'); ctx.fillStyle='#f2f1ed'; rrect(ctx,mx,my,mw,mh,mw*0.12); ctx.fill(); noShadow(ctx);
+      ctx.strokeStyle='#f2f1ed'; ctx.lineWidth=mw*0.14; ctx.beginPath(); ctx.arc(mx+mw,my+mh*0.45,mh*0.2,-Math.PI/2,Math.PI/2); ctx.stroke(); ctx.restore(); }
+    signature(ctx,W,H,sigOn(mix([200,180,156],[0,0,0],.1)));
+  },
+  monitor(ctx,W,H){
+    const u=Math.min(W,H), bg=[12,12,15], deskY=H*(W/H>1.3?0.8:0.66);
+    ctx.fillStyle=rgb(bg); ctx.fillRect(0,0,W,H);
+    let mw=W*K(W/H>1.3?0.7:0.94,0.96), mh=mw*0.6;
+    const maxH=deskY*K(0.74,0.8); if(mh>maxH){ mh=maxH; mw=mh/0.6; }
+    const standH=Math.max(u*0.05, deskY*0.1), mx=W/2-mw/2, my=deskY-standH-mh;
+    // bias light glow from the art behind the monitor
+    ctx.save(); ctx.globalAlpha=.95; ctx.drawImage(ART.glow,W/2-mw*1.1,my+mh/2-mh*1.25,mw*2.2,mh*2.5); ctx.restore();
+    let g=ctx.createRadialGradient(W/2,my+mh/2,Math.max(mw,mh)*0.5,W/2,my+mh/2,Math.hypot(W,H)*0.7);
+    g.addColorStop(0,'rgba(12,12,15,0)'); g.addColorStop(1,'rgba(12,12,15,1)'); ctx.fillStyle=g; ctx.fillRect(0,0,W,H);
+    // desk
+    g=ctx.createLinearGradient(0,deskY,0,H); g.addColorStop(0,'#2b2622'); g.addColorStop(1,'#151210'); ctx.fillStyle=g; ctx.fillRect(0,deskY,W,H-deskY);
+    ctx.save(); ctx.globalAlpha=.25; ctx.drawImage(ART.glow,W/2-mw*0.8,deskY,mw*1.6,(H-deskY)*1.2); ctx.restore();
+    ctx.fillStyle='rgba(255,255,255,.08)'; ctx.fillRect(0,deskY,W,u*0.003);
+    noise(ctx,W,H,.05);
+    // stand
+    ctx.fillStyle='#2c2c30'; ctx.fillRect(W/2-mw*0.035,my+mh-u*0.01,mw*0.07,standH+u*0.01);
+    ctx.fillStyle='#3a3a3f'; ctx.beginPath(); ctx.ellipse(W/2,deskY,mw*0.14,u*0.012,0,0,Math.PI*2); ctx.fill();
+    // monitor body
+    ctx.save(); shadow(ctx,u*0.05,0,u*0.02,'rgba(0,0,0,.6)');
+    ctx.fillStyle='#0b0b0d'; rrect(ctx,mx,my,mw,mh,u*0.01); ctx.fill(); noShadow(ctx);
+    ctx.strokeStyle='#2e2e33'; ctx.lineWidth=u*0.003; rrect(ctx,mx,my,mw,mh,u*0.01); ctx.stroke();
+    const bz=mw*0.014; screenArt(ctx,mx+bz,my+bz,mw-2*bz,mh-2*bz,u*0.004);
+    ctx.restore();
+    // keyboard + mouse
+    const kw=mw*0.5, kh=Math.min(kw*0.2,(H-deskY)*0.3), ky=deskY+(H-deskY)*0.35;
+    if(ky+kh<H-u*0.02){
+      ctx.save(); shadow(ctx,u*0.02,0,u*0.008,'rgba(0,0,0,.5)'); ctx.fillStyle='#1e1e22'; rrect(ctx,W/2-kw/2,ky,kw,kh,kh*0.1); ctx.fill(); noShadow(ctx);
+      ctx.fillStyle='#2f2f35'; const cols=15, rows=4, gx=kw*0.03, kx0=W/2-kw/2+gx, kw2=(kw-2*gx)/cols, kh2=(kh-2*gx)/rows;
+      for(let r=0;r<rows;r++)for(let c=0;c<cols;c++){ rrect(ctx,kx0+c*kw2+kw2*0.1,ky+gx+r*kh2+kh2*0.12,kw2*0.8,kh2*0.76,kw2*0.12); ctx.fill(); }
+      ctx.fillStyle='#1e1e22'; shadow(ctx,u*0.015,0,u*0.006,'rgba(0,0,0,.5)'); ctx.beginPath(); ctx.ellipse(W/2+kw/2+kw*0.12,ky+kh/2,kh*0.28,kh*0.45,0,0,Math.PI*2); ctx.fill(); ctx.restore();
+    }
+    signature(ctx,W,H,'rgba(255,255,255,.75)');
+  },
   clean(ctx,W,H){
     const p=ART.pal, u=Math.min(W,H);
     const bg = state.border==='white'?[246,245,241]: state.border==='black'?[12,12,14]:
                state.border==='colour'?mix(p.vivid,[12,12,14],.25): (lum(p.avg)>0.5?[18,18,20]:[244,243,239]);
     ctx.fillStyle=rgb(bg); ctx.fillRect(0,0,W,H);
-    const m=u*0.075, sigSpace = state.sig?u*0.06:0;
+    const m=u*Math.max(0.02,0.1-0.05*state.artSize), sigSpace = state.sig?u*0.06:0;
     const r=fit(ART.w,ART.h,W-2*m,H-2*m-sigSpace), x=(W-r.w)/2, y=(H-sigSpace-r.h)/2;
     ctx.save(); if(lum(bg)>0.5) shadow(ctx,u*0.02,0,u*0.008,'rgba(0,0,0,.18)'); ctx.fillStyle='#000'; ctx.fillRect(x,y,r.w,r.h); noShadow(ctx);
     art(ctx,x,y,r.w,r.h); ctx.restore();
@@ -567,6 +665,8 @@ chips($('frameChips'),[['black','Black'],['white','White'],['oak','Oak'],['none'
 chips($('borderChips'),[['auto','Auto'],['white','White'],['black','Black'],['colour','From art']],'border');
 chips($('sigStyleChips'),[['caps','CAPS'],['script','Script'],['mono','mono']],'sigStyle');
 chips($('sigPosChips'),[['bl','Left'],['bc','Centre'],['br','Right']],'sigPos');
+$('artSize').value=state.artSize; $('artSize').oninput=e=>{state.artSize=+e.target.value;persist();refresh();};
+$('fill').checked=state.fill; $('fill').onchange=e=>{state.fill=e.target.checked;persist();refresh();};
 $('tilt').checked=state.tilt; $('tilt').onchange=e=>{state.tilt=e.target.checked;persist();refresh();};
 $('sig').checked=state.sig; $('sig').onchange=e=>{state.sig=e.target.checked;persist();refresh();};
 $('sigText').value=state.sigText; $('sigText').oninput=e=>{state.sigText=e.target.value;persist();refresh();};
