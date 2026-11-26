@@ -1105,7 +1105,7 @@ function titleIdeas(t,r){
   ];
   const order=[0,1,2,0,3,1,4,5,2,0,1,3];
   const out=[], seen=new Set(); let guard=0, k=0;
-  while(out.length<6 && guard++<80){ const f=forms[order[k++%order.length]](); const w=f.t.toLowerCase().split(' ');
+  while(out.length<6 && guard++<80){ const f=forms[order[k++%order.length]](); const w=f.t.toLowerCase().split(/[\s-]+/).map(x=>x.replace(/(es|s)$/,''));
     if(seen.has(f.t) || new Set(w).size<w.length) continue; seen.add(f.t); out.push(f); }
   return out;
 }
