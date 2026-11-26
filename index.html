@@ -83,7 +83,11 @@ textarea{width:100%;min-height:170px;background:var(--chip);border:0;border-radi
 .busy{position:fixed;inset:0;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,.5);z-index:15;font-weight:600}
 .busy.show{display:flex}
 @media (min-width:900px){
-  main{display:grid;grid-template-columns:1.2fr 1fr;gap:8px;max-width:1200px;margin:0 auto}
+  main{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(0,1fr);gap:8px;max-width:1300px;margin:0 auto}
+  .controls,.stage{min-width:0}
+  .controls .chips{flex-wrap:wrap;overflow-x:visible}
+  .preview-wrap{min-height:60vh}
+  .bar{max-width:1300px;margin:0 auto}
   #preview{max-height:80vh}
   .stage{position:sticky;top:8px;align-self:start}
 }
