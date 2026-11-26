@@ -4,7 +4,8 @@ A mockup maker that runs in your phone's browser. Pick a piece from your gallery
 
 ## What it does
 
-- **7 scenes, all drawn in code** (no stock photos, so there are no licence issues): Framed on wall, Dark room glow, Phone screen, Gallery (with a wall label), Taped poster, Desk print, Clean border.
+- **10 scenes, all drawn in code** (no stock photos, so there are no licence issues): Framed on wall, Dark room glow, Phone screen, Gallery (with a wall label), Taped poster, Desk print, Tablet, Laptop, Desktop monitor, Clean border.
+- **Art size slider** makes the piece bigger or smaller in any scene. **Fill the screen** makes the art cover the whole device display (it crops the edges).
 - **4 sizes:** Instagram 4:5 (1080×1350), Square (1080×1080), Story/Reel (1080×1920), Twitter/X 16:9 (1600×900).
 - **Carousel set:** saves 3 slides in one go: the full piece on a clean border, a close-up detail (tap the small picture to choose where, and use the slider to zoom), and the scene you chose.
 - **Branding:** a "NOWHINGNESS" signature you can turn on or off, in three styles (CAPS, Script, mono) and three positions. Your choices are remembered.
