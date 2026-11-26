@@ -82,7 +82,7 @@ textarea{width:100%;min-height:170px;background:var(--chip);border:0;border-radi
 .toast.show{opacity:1}
 .busy{position:fixed;inset:0;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,.5);z-index:15;font-weight:600}
 .busy.show{display:flex}
-.busy-box{display:flex;flex-direction:column;align-items:center;gap:12px;text-align:center;padding:0 24px}
+.busy-box{white-space:pre-line;display:flex;flex-direction:column;align-items:center;gap:12px;text-align:center;padding:0 24px}
 @media (min-width:900px){
   main{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(0,1fr);gap:8px;max-width:1300px;margin:0 auto}
   .controls,.stage{min-width:0}
@@ -194,7 +194,7 @@ textarea{width:100%;min-height:170px;background:var(--chip);border:0;border-radi
       <button class="btn primary" id="batchBtn" style="width:100%;margin-top:8px">Pick pieces for batch</button>
     </div>
   </section>
-  <section><p class="hint">Everything stays on your phone. Nothing is uploaded. <span style="opacity:.6">Version 16</span></p></section>
+  <section><p class="hint">Everything stays on your phone. Nothing is uploaded. <span style="opacity:.6">Version 17</span></p></section>
 </div>
 </main>
 
@@ -1372,7 +1372,7 @@ $('title').addEventListener('input',()=>{ $('capTitle').value=state.title; build
 $('sigText').addEventListener('input',buildCaption);
 $('capMood').value=state.capMood; $('capMood').oninput=e=>{ state.capMood=e.target.value; capRefresh(); };
 /* ---------- AI titles with Google Gemini (optional, user's own free key, stored only on this device) ---------- */
-const GEMINI_MODELS=['gemini-flash-latest','gemini-2.5-flash']; let GEMINI_WAIT=40000;
+const GEMINI_MODELS=['gemini-flash-latest','gemini-2.5-flash']; let GEMINI_WAIT=30000;
 // Ask Google which models this key can use, newest Flash first (models get retired, so don't hard-code them)
 async function geminiModels(key){
   try{
@@ -1384,7 +1384,9 @@ async function geminiModels(key){
     const ver=n=>{ const v=n.match(/gemini-(\d+(?:\.\d+)?)/); return v?parseFloat(v[1]):0; };
     const score=n=>ver(n)*10-(/lite/.test(n)?3:0)-(/preview/.test(n)?1:0)-(/latest/.test(n)?0.5:0)-(/-\d{3}$|\d{2}-\d{4}/.test(n)?0.2:0);
     list.sort((a,b)=>score(b)-score(a));
-    const out=[...new Set(list)].slice(0,4);
+    // newest full Flash, then newest Flash-Lite (fastest), then Google's own aliases as backups
+    const full=list.filter(n=>!/lite/.test(n)), lite=list.filter(n=>/lite/.test(n));
+    const out=[...new Set([full[0],lite[0],...['gemini-flash-latest','gemini-2.5-flash','gemini-flash-lite-latest'].filter(n=>list.includes(n)),full[1]].filter(Boolean))].slice(0,4);
     return out.length?out:GEMINI_MODELS;
   }catch(e){ return GEMINI_MODELS; }
 }
@@ -1402,30 +1404,38 @@ async function aiTitles(){
   if(!ART){ toast('Pick a piece first'); return; }
   const key=aiKey(); if(!key){ $('aiKeyBox').hidden=false; $('aiKey').focus(); return; }
   const look=LOOK, t0=Date.now(); let cancelled=false, ctrl=null, timedOut=false;
-  const label=()=>$('busyText').textContent=`Asking Gemini… ${Math.round((Date.now()-t0)/1000)}s`;
+  const label=()=>$('busyText').textContent=`Asking Gemini… ${Math.round((Date.now()-t0)/1000)}s`+($('busyCancel').dataset.m?`\n(${$('busyCancel').dataset.m})`:'');
   busy(true); label(); const tick=setInterval(label,1000);
-  $('busyCancel').hidden=false; $('busyCancel').onclick=()=>{ cancelled=true; if(ctrl) ctrl.abort(); };
+  $('busyCancel').dataset.m=''; $('busyCancel').hidden=false; $('busyCancel').onclick=()=>{ cancelled=true; if(ctrl) ctrl.abort(); };
   try{
     const c=shrink(ART.img,ART.w,ART.h,640), b64=c.toDataURL('image/jpeg',0.82).split(',')[1];
     $('busyText').textContent='Asking Gemini… checking models'; const models=await geminiModels(key); label();
-    let res, lastErr='', errs=[];
+    let res, lastErr='', errs=[], stop=false;
     for(const m of models){
       if(cancelled) break;
+      for(let lean=1; lean>=0; lean--){                       // lean = ask for quick, low-detail answer; plain retry if the model refuses those settings
       const gen={responseMimeType:'application/json',temperature:1.0};
-      if(/^gemini-2\.5-flash/.test(m)) gen.thinkingConfig={thinkingBudget:0};          // no slow "thinking" step
+      if(lean){ gen.mediaResolution='MEDIA_RESOLUTION_LOW';
+        if(/^gemini-2\.5-flash/.test(m)) gen.thinkingConfig={thinkingBudget:0};          // no slow "thinking" step
+        else if(/^gemini-([3-9]|\d\d)|latest/.test(m)) gen.thinkingConfig={thinkingLevel:'low'}; }
       const body={contents:[{parts:[{text:aiPrompt()},{inline_data:{mime_type:'image/jpeg',data:b64}}]}],generationConfig:gen};
+      $('busyCancel').dataset.m=m;
       ctrl=new AbortController(); timedOut=false;
       const timer=setTimeout(()=>{ timedOut=true; ctrl.abort(); },GEMINI_WAIT);
       try{
         const r=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${m}:generateContent`,{method:'POST',
           headers:{'Content-Type':'application/json','x-goog-api-key':key},body:JSON.stringify(body),signal:ctrl.signal});
         if(r.ok){ res=await r.json(); break; }
-        const err=await r.json().catch(()=>({})); lastErr=(err.error&&err.error.message)||('HTTP '+r.status); errs.push(m+': '+lastErr);
-        if(r.status===401||r.status===403||r.status===429||/API key|API_KEY/i.test(lastErr)) break;   // bad key or limit: other models won't help
+        const err=await r.json().catch(()=>({})); lastErr=(err.error&&err.error.message)||('HTTP '+r.status);
+        if(lean && r.status===400 && /think|resolution|media|generation_?config|unknown name|invalid value/i.test(lastErr)){ clearTimeout(timer); continue; }
+        errs.push(m+': '+lastErr);
+        if(r.status===401||r.status===403||r.status===429||/API key|API_KEY/i.test(lastErr)) stop=true;   // bad key or limit: other models won't help
       }catch(e){
         if(cancelled) break;
         lastErr=timedOut?'no answer after '+GEMINI_WAIT/1000+' seconds':(e.message||'network error'); errs.push(m+': '+lastErr);
       }finally{ clearTimeout(timer); }
+      break; }
+      if(res||cancelled||stop) break;
     }
     if(cancelled){ toast('Cancelled'); return; }
     if(!res){ console.warn('Gemini errors',errs); throw new Error((errs.length>1?errs.map(x=>x.slice(0,70)).join(' / '):lastErr)||'No answer'); }
