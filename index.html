@@ -906,6 +906,11 @@ function inspect(img){
   for(let y=0;y<h;y++) for(let x=0;x<w;x++){ const k=y*w+x;
     if(x<w-1) dh+=Math.abs(L[k]-L[k+1]); if(y<h-1) dv+=Math.abs(L[k]-L[k+w]); if(x<w/2) sym+=Math.abs(L[k]-L[y*w+(w-1-x)]); }
   dh/=(w-1)*h; dv/=w*(h-1); sym/=(Math.floor(w/2)*h);
+  // dark centre with lighter surroundings = tunnel / portal / corridor
+  let cIn=0,nIn=0,cOut=0,nOut=0;
+  for(let y=0;y<h;y++) for(let x=0;x<w;x++){ const dx=(x/w-.5), dy=(y/h-.5), rr=Math.hypot(dx,dy);
+    if(rr<0.14){cIn+=L[y*w+x];nIn++;} else if(rr>0.3){cOut+=L[y*w+x];nOut++;} }
+  const centre=cIn/nIn, outer=cOut/nOut;
   const colours=Object.entries(cnt).filter(([k,v])=>v/N>0.1).sort((a,b)=>b[1]-a[1]).map(([k])=>k);
   const hueNames=colours.filter(c=>!['black','white','grey'].includes(c));
   const t={colours, hues:hueNames, many: Object.entries(cnt).filter(([k,v])=>!['black','white','grey'].includes(k)&&v/N>0.06).length>=4,
@@ -913,7 +918,9 @@ function inspect(img){
     pastel:meanL>0.62&&meanS>0.05&&meanS<0.45&&chrom/N>0.3, highContrast:contrast>0.27,
     bandsH: dv>dh*1.6 && dv>0.04, bandsV: dh>dv*1.6 && dh>0.04, busy:(dh+dv)/2>0.05, minimal:(dh+dv)/2<0.006,
     symmetric: sym<0.12*contrast && (dh+dv)/2>0.005, warm:warm>cool*1.8, cool:cool>warm*1.8};
-  t._dbg={dh,dv,sym,meanS,colourfulness,contrast,symr:sym/contrast};
+  t.tunnel = centre < outer*0.55 && outer>0.25;
+  t.pattern = t.busy || (t.many && (dh+dv)/2>0.02);
+  t._dbg={dh,dv,sym,meanS,colourfulness,contrast,symr:sym/contrast,centre,outer};
   t.style = t.bandsH||t.bandsV ? 'glitch' : t.symmetric ? 'generative' : (t.mono&&!t.busy)||(!t.vivid&&!t.minimal&&!t.many) ? 'photo' : 'abstract';
   return t;
 }
@@ -928,23 +935,65 @@ function describe(t){
 const CWORDS={red:['Red','Crimson','Scarlet'],orange:['Amber','Orange','Tangerine'],yellow:['Yellow','Gold','Citrine'],green:['Green','Acid','Jade'],
   teal:['Teal','Lagoon','Verdigris'],cyan:['Cyan','Ice','Aqua'],blue:['Blue','Cobalt','Ultramarine'],violet:['Violet','Ultraviolet','Lavender'],
   magenta:['Magenta','Fuchsia','Neon'],pink:['Pink','Rose','Bubblegum'],black:['Black','Ink','Obsidian'],white:['White','Paper','Bone'],grey:['Grey','Ash','Concrete']};
+/* artistic titles: a motif + a place, e.g. "Rosette Passage", "Cathedral of Static", "The Saffron Reliquary" */
+const MOTIFS={ // [singular, plural]
+  pattern:[['Rosette','Rosettes'],['Mosaic','Mosaics'],['Tessera','Tesserae'],['Medallion','Medallions'],['Kaleidoscope','Kaleidoscopes'],['Filigree','Filigrees'],['Ornament','Ornaments'],['Petal','Petals']],
+  glitch:[['Signal','Signals'],['Static','Static'],['Scanline','Scanlines'],['Ghost','Ghosts'],['Glyph','Glyphs'],['Echo','Echoes']],
+  symmetric:[['Mandala','Mandalas'],['Halo','Halos'],['Iris','Irises'],['Mirror','Mirrors'],['Medallion','Medallions']],
+  tunnel:[['Vortex','Vortices'],['Spiral','Spirals'],['Iris','Irises'],['Lantern','Lanterns']],
+  dark:[['Lantern','Lanterns'],['Ember','Embers'],['Ghost','Ghosts'],['Echo','Echoes']],
+  bright:[['Halo','Halos'],['Aurora','Auroras'],['Prism','Prisms'],['Petal','Petals']],
+  minimal:[['Veil','Veils'],['Echo','Echoes'],['Ripple','Ripples']],
+  base:[['Prism','Prisms'],['Bloom','Blooms'],['Orbit','Orbits'],['Ripple','Ripples'],['Aurora','Auroras']]
+};
+const PLACES={
+  tunnel:['Passage','Corridor','Tunnel','Descent','Well','Threshold'],
+  pattern:['Garden','Atrium','Cathedral','Cloister','Orchard','Labyrinth'],
+  glitch:['Frequency','Channel','Broadcast','Archive','Transmission'],
+  symmetric:['Shrine','Altar','Chapel','Nave','Reliquary'],
+  dark:['Vault','Grotto','Undercroft'],
+  bright:['Conservatory','Observatory','Meadow'],
+  minimal:['Field','Room','Shore'],
+  base:['Chamber','Gallery','Threshold','Vestibule']
+};
+const CADJ={red:['Vermilion','Crimson','Garnet'],orange:['Saffron','Ochre','Amber'],yellow:['Citrine','Gilded','Honey'],green:['Viridian','Absinthe','Jade'],
+  teal:['Verdigris','Lagoon'],cyan:['Glacial','Aqua','Opaline'],blue:['Cobalt','Ultramarine','Indigo'],violet:['Amethyst','Lilac','Violet'],
+  magenta:['Fuchsia','Orchid','Magenta'],pink:['Coral','Rose','Peony'],mono:['Ivory','Ink','Ash','Silver'],many:['Prismatic','Iridescent','Chromatic','Kaleidoscopic']};
+const SONGS=['Hymn','Elegy','Lullaby','Nocturne','Litany','Requiem','Reverie','Vespers'];
+const SONG_ADJ=['Broken','Distant','Sleeping','Burning','Hidden','Endless','Folded'];
+const VERBS=['Bloom','Gather','Turn','Dissolve','Sleep','Burn'];
+function traitKeys(t){ const k=[];
+  if(t.tunnel)k.push('tunnel'); if(t.pattern)k.push('pattern'); if(t.bandsH||t.bandsV)k.push('glitch'); if(t.symmetric)k.push('symmetric');
+  if(t.dark)k.push('dark'); if(t.bright)k.push('bright'); if(t.minimal)k.push('minimal'); k.push('base'); return k; }
 function titleIdeas(t,r){
-  const nouns=[];
-  if(t.bandsH||t.bandsV) nouns.push('Signal','Static','Scanline','Interference','Dropout','Drift','Bleed','Feedback');
-  if(t.symmetric) nouns.push('Mirror','Portal','Altar','Bloom','Mandala');
-  if(t.dark) nouns.push('Afterhours','Midnight','Void','Undertow');
-  if(t.bright) nouns.push('Flare','Daylight','Overexposure');
-  if(t.busy) nouns.push('Overload','Swarm','Noise','Crowd');
-  if(t.minimal) nouns.push('Hush','Stillness','Quiet');
-  if(t.warm) nouns.push('Heat','Ember','Sunburn'); if(t.cool) nouns.push('Frost','Tide','Coolant');
-  if(t.pastel) nouns.push('Daydream','Candy','Haze');
-  nouns.push('Fragment','Memory','Echo','Residue','Transmission');
-  const cw=(t.mono?['black','white']:t.hues.length?t.hues:['grey']).flatMap(c=>CWORDS[c]||[]);
-  const N=()=>pick(nouns,r), C=()=>pick(cw,r), num=()=>String(Math.floor(r()*9000)+1000);
-  const forms=[()=>`${C()} ${N()}`,()=>`${N()} in ${C()}`,()=>`${N().toUpperCase()}_${num()}`,()=>`${C()} ${N()} II`,
-               ()=>`Untitled (${C().toLowerCase()} ${N().toLowerCase()})`,()=>`${N()} / ${N()}`,()=>`The ${C()} ${N()}`];
-  const out=new Set(); let guard=0; while(out.size<6&&guard++<60){ const f=pick(forms,r)(); if(!/(\b\w+\b).*\b\1\b/i.test(f)) out.add(f); }
-  return [...out];
+  const keys=traitKeys(t), top=keys.slice(0,2);  // strongest traits weigh most
+  const fromBank=(bank)=>{ const ks = r()<0.75 ? top : keys; const pool=ks.flatMap(k=>bank[k]||[]); return pick(pool.length?pool:bank.base,r); };
+  const M=()=>fromBank(MOTIFS), P=()=>fromBank(PLACES);
+  const cols = t.mono?CADJ.mono : t.many?CADJ.many.concat(...t.hues.slice(0,2).map(h=>CADJ[h]||[])) : t.hues.slice(0,2).flatMap(h=>CADJ[h]||[]);
+  const C=()=>pick(cols.length?cols:CADJ.many,r);
+  const forms=[
+    ()=>{const p=P(); return {t:`${M()[0]} ${p}`, space:p};},                                      // Rosette Passage
+    ()=>{const p=P(); return {t:`${p} of ${M()[1]}`, space:p};},                                   // Cathedral of Halos
+    ()=>{const p=P(); return {t:`The ${C()} ${p}`, space:p};},                                     // The Saffron Reliquary
+    ()=>{const m=M()[0]; return {t:`${C()} ${m}`, space:null};},                                   // Cobalt Rosette
+    ()=>{const s2=pick(SONGS,r), adj=pick(SONG_ADJ,r); return {t:`${s2} for ${/^[AEIOU]/.test(adj)?'an':'a'} ${adj} ${M()[0]}`, space:s2};}, // Hymn for a Broken Signal
+    ()=>{const m=M()[1]; return {t:`Where the ${m} ${pick(VERBS,r)}`, space:null};}               // Where the Petals Dissolve
+  ];
+  const order=[0,1,2,0,3,1,4,5,2,0,1,3];
+  const out=[], seen=new Set(); let guard=0, k=0;
+  while(out.length<6 && guard++<80){ const f=forms[order[k++%order.length]](); const w=f.t.toLowerCase().split(' ');
+    if(seen.has(f.t) || new Set(w).size<w.length) continue; seen.add(f.t); out.push(f); }
+  return out;
+}
+const INGREDIENTS=t=>{ const a=[];
+  if(t.pattern)a.push('pattern','repetition'); if(t.bandsH||t.bandsV)a.push('static','signal','noise'); if(t.tunnel)a.push('depth','shadow');
+  if(t.symmetric)a.push('symmetry','reflection'); if(t.many||t.vivid)a.push('color','light'); if(t.dark)a.push('shadow','silence');
+  if(t.bright)a.push('light'); if(t.minimal)a.push('space','silence'); a.push('color','noise'); return [...new Set(a)]; };
+function describeLine(space,t,r){
+  const ing=shuffle(INGREDIENTS(t),r), a=ing[0], b=ing[1]||'noise', c=ing[2]||'light', sp=space.toLowerCase();
+  const art=/^[aeiou]/.test(sp)?'An':'A';
+  return pick([`${art} ${sp} built from ${a}, ${b}, and ${c}.`,`${art} ${sp} made of ${a} and ${b}.`,
+    `Somewhere between ${a} and ${b}, ${art.toLowerCase()} ${sp}.`,`Step into ${art.toLowerCase()} ${sp} of ${a}.`],r);
 }
 const PIC_TAGS={red:['#redaesthetic','#redart'],orange:['#orangeaesthetic'],yellow:['#yellowaesthetic'],green:['#greenaesthetic'],teal:['#tealaesthetic'],
   cyan:['#cyan','#blueaesthetic'],blue:['#blueaesthetic','#bluetones'],violet:['#purpleaesthetic','#violet'],magenta:['#magenta','#pinkaesthetic'],pink:['#pinkaesthetic','#pinkart']};
@@ -964,12 +1013,12 @@ const TRAIT_LINES=t=>{ const l=[], h=t.hues;
   if(t.bandsH) l.push('Scanlines all the way down.'); if(t.symmetric) l.push('Folded into itself.');
   if(t.dark) l.push('Made for after midnight.'); if(t.bright) l.push('Turned all the way up.'); if(t.mono) l.push('No colour, just signal.');
   if(t.busy) l.push('Too much on purpose.'); if(t.minimal) l.push('Less noise, more space.'); return l; };
-let LOOK=null, titleSeed=1;
+let LOOK=null, titleSeed=1, TITLE_SPACE=null;
 function showTitleIdeas(){
   if(!LOOK){ $('titleSugWrap').hidden=true; return; }
   const box=$('titleSug'); box.innerHTML='';
-  for(const t of titleIdeas(LOOK,rng(titleSeed))){ const b=document.createElement('button'); b.className='chip'; b.textContent=t;
-    b.onclick=()=>{ state.title=t; $('capTitle').value=t; $('title').value=t; persist(); buildCaption(); refresh(); }; box.appendChild(b); }
+  for(const o of titleIdeas(LOOK,rng(titleSeed))){ const t=o.t, b=document.createElement('button'); b.className='chip'; b.textContent=t;
+    b.onclick=()=>{ state.title=t; TITLE_SPACE={title:t,space:o.space}; $('capTitle').value=t; $('title').value=t; persist(); buildCaption(); refresh(); }; box.appendChild(b); }
   $('titleSugWrap').hidden=false;
 }
 function onArtLoaded(){
@@ -1017,14 +1066,21 @@ function buildTags(r){
     return [main, extra];
   }
   const recent=new Set(recentTags()), sets=STYLE_SETS[state.capStyle], out=[];
+  // like your own posts: your name tag and the app tag come first
+  const own='#'+(state.sigText||'nowhingness').toLowerCase().replace(/[^a-z0-9_]/g,'');
+  if(own.length>1) out.push(own);
+  if(state.capApp!=='none') out.push('#'+state.capApp.toLowerCase());
+  const left=()=>5-out.length;
   const take=(list,n)=>{ const fresh=shuffle(list.filter(t=>!recent.has(t)&&!out.includes(t)),r), old=shuffle(list.filter(t=>recent.has(t)&&!out.includes(t)),r);
     out.push(...fresh.concat(old).slice(0,n)); };
   // Instagram allows only 5 hashtags per post (since Dec 2025), so pick 5 specific ones
-  if(LOOK){ // 2 for the style, 1 for the colours, 1 for the texture, 1 general/prints
-    take(TAGS[sets[0]],2); take(pt.colour.length?pt.colour:TAGS[sets[1]],1); take(pt.texture.length?pt.texture:TAGS[sets[2]],1);
-  } else { take(TAGS[sets[0]],2); take(TAGS[sets[1]],1); take(TAGS[sets[2]],1); }
-  take(state.capCta==='prints'?TAGS.prints:TAGS.core,1);
-  return out;   // 5 tags, a different mix each time
+  const styleMain={glitch:'#glitchart',abstract:'#abstractart',photo:'#abstractphotography',generative:'#generativeart'}[state.capStyle];
+  if(!out.includes(styleMain)) out.push(styleMain);
+  if(state.capCta==='prints' && left()>0) take(TAGS.prints,1);
+  if(LOOK && left()>0) take(pt.texture.length?pt.texture:TAGS[sets[0]],1);
+  if(LOOK && left()>0) take(pt.colour.length?pt.colour:TAGS[sets[1]],1);
+  while(left()>0){ const before=out.length; take(TAGS[sets[0]].concat(TAGS.core),1); if(out.length===before) break; }
+  return out.slice(0,5);   // Instagram's limit
 }
 let CAP={text:'',tags:[]};
 function buildCaption(){
@@ -1032,18 +1088,21 @@ function buildCaption(){
   const title=(state.title||'').trim(), mood=(state.capMood||'').trim(), name=(state.sigText||'Nowhingness').trim();
   const lines=[];
   const tl = LOOK ? TRAIT_LINES(LOOK) : [];
-  const opener = tl.length && r()<0.6 ? pick(tl,r) : pick(OPENERS[state.capStyle],r);
-  lines.push(title?`"${title}"`:opener);
-  if(title) lines.push(opener);
-  if(mood) lines.push(mood.charAt(0).toUpperCase()+mood.slice(1)+(/[.!?]$/.test(mood)?'':'.'));
-  if(state.capApp!=='none' && ig) lines.push(`Made on my phone with ${state.capApp}.`);
-  const cta=pick(CTAS[state.capCta],r); if(cta) lines.push(cta);
+  const space = TITLE_SPACE && TITLE_SPACE.title===title ? TITLE_SPACE.space : null;
+  let opener;
+  if(LOOK && (space || r()<0.5)) opener = describeLine(space || pick(['place','room','world','space'],r), LOOK, r);
+  else opener = tl.length && r()<0.6 ? pick(tl,r) : pick(OPENERS[state.capStyle],r);
+  if(title) lines.push(title);
+  const body=[opener];
+  if(mood) body.push(mood.charAt(0).toUpperCase()+mood.slice(1)+(/[.!?]$/.test(mood)?'':'.'));
+  const cta=pick(CTAS[state.capCta],r); if(cta) body.push(cta);
+  lines.push(body.join(' '));
   if(ig) lines.push(`— ${name}`);
   const tags=buildTags(r);
   let text;
   if(!ig){ text=lines.join(' ')+' '+tags.join(' '); if(text.length>280) text=text.slice(0,277)+'…'; }
-  else if(state.capTagPlace==='comment') text=lines.join('\n');
-  else text=lines.join('\n')+'\n.\n.\n'+tags.join(' ');
+  else if(state.capTagPlace==='comment') text=lines.join('\n\n');
+  else text=lines.join('\n\n')+'\n\n'+tags.join(' ');
   CAP={text,tags};
   $('capOut').value=text;
   $('tagPlaceRow').style.display = ig?'':'none';
