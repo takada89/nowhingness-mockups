@@ -1,0 +1,4 @@
+Third-party files in this folder:
+- mediapipe/ : @mediapipe/tasks-vision 0.10.14 by Google, Apache License 2.0 (https://github.com/google-ai-edge/mediapipe)
+- models/efficientdet_lite0.tflite : MediaPipe object detector model (EfficientDet-Lite0, COCO classes) by Google, Apache License 2.0
+They run entirely in the browser; no image leaves the device.

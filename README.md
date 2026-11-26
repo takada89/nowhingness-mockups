@@ -15,6 +15,7 @@ A mockup maker that runs in your phone's browser. Pick a piece from your gallery
 - **My photo:** pick a photo of your own wall, desk or screen, then drag the 4 pink corners to place your art in it with real perspective. It has an optional frame and a slider that lets the photo's light show on the art.
 - **Caption & hashtags:** builds an Instagram or X caption from your title, mood and the app you used, plus a call to action. It picks 5 specific hashtags (Instagram's limit since Dec 2025), shuffled so that recently used ones come last. It also has one-tap copy and a simple weekly posting plan. It works offline, with no AI service.
 - **Suggestions from your picture:** when you pick art, the app reads its colours, brightness, glitch bands or streaks, mirror symmetry and amount of detail. From that it suggests titles you can tap, picks the style, and chooses hashtags that match (for example #pixelsorting for glitch bands, or #monochrome for black and white). It can't recognise objects or faces, only colour and texture.
+- **People and objects:** a free object detector (Google MediaPipe, runs on your phone) spots people and some objects. Photos of people, places or nature get photo-style titles, captions and hashtags. The **Subject** choice (Auto, Art, People, Place, Nature) corrects it when it guesses wrong. It can't read text or recognise who someone is. It needs the hosted site, because opened as a local file it uses colours only.
 
 ## Putting it on your Android phone
 

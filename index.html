@@ -159,6 +159,7 @@ textarea{width:100%;min-height:170px;background:var(--chip);border:0;border-radi
     <div class="panel" style="padding:4px 14px 12px">
       <div class="row"><label>Post for</label><div class="chips" id="capPlatChips"></div></div>
       <div class="hint" id="lookLine" style="margin-top:10px">Pick your art and I'll suggest titles and hashtags from its colours and texture.</div>
+      <div class="row"><label>Subject</label><div class="chips" id="subjectChips"></div></div>
       <div class="row"><label>Title</label><input type="text" id="capTitle" placeholder="Untitled" maxlength="60"></div>
       <div id="titleSugWrap" hidden><div class="chips" id="titleSug" style="margin:6px 0;flex-wrap:wrap;padding:0"></div>
         <button class="chip" id="titleMore" style="margin-bottom:8px">More title ideas</button></div>
@@ -225,7 +226,7 @@ const SCENES = [
   ['gallery','Gallery'],['poster','Taped poster'],['desk','Desk print'],['tablet','Tablet'],['laptop','Laptop'],['monitor','Desktop monitor'],['clean','Clean border']
 ];
 const DEFAULTS = {scene:'frame',format:'ig45',wall:'auto',frame:'black',border:'auto',tilt:true,
-  title:'',blend:0.3,batchMode:'carousel',capPlat:'ig',capStyle:'glitch',capApp:'Glitchlab',capMood:'',capCta:'save',capTagPlace:'caption',artSize:1,fillScreen:true,sig:true,sigText:'Nowhingness',sigStyle:'caps',sigPos:'br',zoom:2.5,focus:{x:.5,y:.5},pan:{x:.5,y:.5}};
+  title:'',blend:0.3,subject:'auto',batchMode:'carousel',capPlat:'ig',capStyle:'glitch',capApp:'Glitchlab',capMood:'',capCta:'save',capTagPlace:'caption',artSize:1,fillScreen:true,sig:true,sigText:'Nowhingness',sigStyle:'caps',sigPos:'br',zoom:2.5,focus:{x:.5,y:.5},pan:{x:.5,y:.5}};
 let state = Object.assign({}, DEFAULTS);
 try{ const s = JSON.parse(localStorage.getItem('nw-mockup-settings')||'null'); if(s) Object.assign(state, s, {focus:{x:.5,y:.5},pan:{x:.5,y:.5}}); }catch(e){}
 function persist(){ try{ const {focus, pan, ...rest} = state; localStorage.setItem('nw-mockup-settings', JSON.stringify(rest)); }catch(e){} }
@@ -920,7 +921,7 @@ $('batchFile').onchange=async e=>{
     for(let n=0;n<list.length;n++){
       $('busy').textContent=`Rendering piece ${n+1} of ${list.length}…`; await new Promise(r=>setTimeout(r,20));
       const img=await loadImage(list[n]); ART=makeArt(img,list[n].name);
-      LOOK=inspect(img); state.capStyle=LOOK.style; state.focus=autoFocus(img); state.pan={x:.5,y:.5};
+      LOOK=inspect(img); LOOK.det=await detectObjects(img); state.capStyle=subjectOf(LOOK)==='art'?LOOK.style:'photo'; state.focus=autoFocus(img); state.pan={x:.5,y:.5};
       const idea=titleIdeas(LOOK,rng(Math.floor(Math.random()*1e6)+1))[0];
       state.title=idea.t; TITLE_SPACE={title:idea.t,space:idea.space};
       capSeed=Math.floor(Math.random()*1e6)+1; buildCaption(); rememberTags();
@@ -1056,6 +1057,7 @@ function traitKeys(t){ const k=[];
   if(t.tunnel)k.push('tunnel'); if(t.pattern)k.push('pattern'); if(t.bandsH||t.bandsV)k.push('glitch'); if(t.symmetric)k.push('symmetric');
   if(t.dark)k.push('dark'); if(t.bright)k.push('bright'); if(t.minimal)k.push('minimal'); k.push('base'); return k; }
 function titleIdeas(t,r){
+  const subj=subjectOf(t); if(subj!=='art') return photoTitles(t,subj,r);
   const keys=traitKeys(t), top=keys.slice(0,2);  // strongest traits weigh most
   const fromBank=(bank)=>{ const ks = r()<0.75 ? top : keys; const pool=ks.flatMap(k=>bank[k]||[]); return pick(pool.length?pool:bank.base,r); };
   const M=()=>fromBank(MOTIFS), P=()=>fromBank(PLACES);
@@ -1104,6 +1106,81 @@ const TRAIT_LINES=t=>{ const l=[], h=t.hues;
   if(t.dark) l.push('Made for after midnight.'); if(t.bright) l.push('Turned all the way up.'); if(t.mono) l.push('No colour, just signal.');
   if(t.busy) l.push('Too much on purpose.'); if(t.minimal) l.push('Less noise, more space.'); return l; };
 let LOOK=null, titleSeed=1, TITLE_SPACE=null;
+
+/* ---------- seeing people and objects: MediaPipe object detector, runs on the phone (free, offline once loaded) ---------- */
+let DETECTOR=null;
+function getDetector(){
+  if(location.protocol==='file:') return Promise.resolve(null);   // needs the hosted site; opened as a file it falls back to colours only
+  if(!DETECTOR) DETECTOR=(async()=>{
+    const v=await import('./vendor/mediapipe/vision_bundle.mjs');
+    const fs=await v.FilesetResolver.forVisionTasks(new URL('./vendor/mediapipe/wasm',location.href).href);
+    return v.ObjectDetector.createFromOptions(fs,{baseOptions:{modelAssetPath:new URL('./vendor/models/efficientdet_lite0.tflite',location.href).href,delegate:'CPU'},
+      runningMode:'IMAGE',scoreThreshold:0.35,maxResults:15});
+  })().catch(e=>{ console.warn('detector unavailable',e); DETECTOR=null; return null; });
+  return DETECTOR;
+}
+async function detectObjects(img){
+  try{
+    const det=await getDetector(); if(!det) return null;
+    const src=shrink(img,img.naturalWidth||img.width,img.naturalHeight||img.height,640);
+    const res=det.detect(src), area=src.width*src.height;
+    let persons=0, personArea=0; const objects=new Set();
+    for(const d of res.detections){ const c=d.categories[0]; if(!c) continue; const b=d.boundingBox, a=b.width*b.height/area;
+      if(c.categoryName==='person'){ if(c.score>0.45 && a>0.01){ persons++; personArea+=a; } } else if(c.score>0.55) objects.add(c.categoryName); }
+    return {persons,personArea,objects:[...objects]};
+  }catch(e){ console.warn(e); return null; }
+}
+const PLACE_OBJ=['car','bus','truck','train','traffic light','bench','bicycle','motorcycle','stop sign','fire hydrant','boat','parking meter'];
+const NATURE_OBJ=['bird','dog','cat','horse','sheep','cow','potted plant','elephant','bear','zebra','giraffe'];
+function autoSubject(t){
+  if(!t.det) return 'art';
+  if(t.det.persons>0 && t.det.personArea>0.03) return 'people';
+  // glitch bands, dense pattern or mirroring fool the detector ("train" from stripes), so treat those as art
+  if(t.bandsH||t.bandsV||t.pattern||t.symmetric) return 'art';
+  if(t.det.objects.some(o=>PLACE_OBJ.includes(o))) return 'place';
+  if(t.det.objects.some(o=>NATURE_OBJ.includes(o))) return 'nature';
+  return 'art';
+}
+const subjectOf=t=> state.subject==='auto' ? (t?autoSubject(t):'art') : state.subject;
+const OBJ_WORD={'potted plant':'Flowers','vase':'Flowers','bicycle':'Bicycle','car':'Traffic','bus':'Buses','motorcycle':'Motorbikes','dog':'Dog','cat':'Cat',
+  'umbrella':'Umbrella','bench':'Bench','chair':'Chairs','cup':'Coffee','book':'Books','bird':'Birds','boat':'Boats','guitar':'Guitar','kite':'Kites','balloon':'Balloons'};
+const CNAME={red:'Red',orange:'Amber',yellow:'Gold',green:'Green',teal:'Lagoon',cyan:'Aqua',blue:'Blue',violet:'Violet',magenta:'Fuchsia',pink:'Rose',mono:'Silver',many:'Colour'};
+function photoTitles(t,subj,r){
+  const cols=(t.mono?['mono']:t.hues.length?t.hues.slice(0,2):['many']).map(h=>CNAME[h]||'Colour'), C=()=>pick(cols,r);
+  const moments = t.dark?['After Dark','Night Shift','Late Hours'] : t.bright?['Midday','Bright Hours','High Noon'] : ['Blue Hour','Late Afternoon','First Light','Golden Hour'];
+  const M=()=>pick(moments,r);
+  const objs=(t.det?t.det.objects:[]).map(o=>OBJ_WORD[o]).filter(Boolean);
+  let nouns, extra=[];
+  if(subj==='people'){ const n=t.det?t.det.persons:1;
+    nouns = n<=1?['Portrait','Figure','Solo','Self']:n===2?['Two Figures','Pair','Duet','Side by Side']:['Gathering','Company','Ensemble','Crowd'];
+    extra = n>=2?['Proof We Were Here','Here, Together','The Day We Stood Here','Kept Moment']:['Standing Still','Proof I Was Here','Kept Moment']; }
+  else if(subj==='place'){ nouns=['Street','Corner','Facade','Crossing','Plaza','Window','Rooftop']; extra=['Somewhere I Walked','Passing Through','City Noise']; }
+  else { nouns=['Garden','Leaves','Bloom','Canopy','Petals','Field','Shore']; extra=['Growing Toward Light','Green Hours','Quiet Growth']; }
+  const N=()=>pick(nouns,r);
+  const forms=[()=>`${N()} in ${C()}`,()=>`${C()} ${N()}`,()=>`${N()}, ${M()}`,()=>pick(extra,r),
+               ()=> objs.length?`${N()} with ${pick(objs,r)}`:`${N()} at ${M()}`,()=>`${C()} ${M()}`];
+  const out=[], seen=new Set(); let g=0,k=0;
+  while(out.length<6 && g++<60){ const f=forms[k++%forms.length](); if(seen.has(f)) continue; seen.add(f); out.push({t:f,space:null}); }
+  return out;
+}
+const PHOTO_LINES={
+  people:t=>[(t.det&&t.det.persons===2)?'Two people, one good day.':'A moment worth keeping.',(t.det&&t.det.persons>=2)?'Proof we were here.':'Proof I was here.','An ordinary day, turned up loud.','Kept this one for the colours.'],
+  place:()=>['A place, pushed into colour.','Walked past, looked twice.','The city, slightly rearranged.'],
+  nature:()=>['Growing toward the light.','Small green things, loud colours.','Quiet growth, loud colour.']
+};
+const PHOTO_TAGS={
+  people:['#portraitphotography','#portrait','#peoplephotography','#candid','#streetportrait','#photooftheday'],
+  place:['#streetphotography','#urbanphotography','#architecturephotography','#cityscape','#photooftheday'],
+  nature:['#naturephotography','#flowerphotography','#botanical','#plantlovers','#photooftheday']
+};
+function setLookLine(){
+  if(!LOOK) return; const subj=subjectOf(LOOK), d=LOOK.det;
+  let who='';
+  if(d && d.persons) who = d.persons===1?'1 person, ':`${d.persons} people, `;
+  const objs = d? d.objects.map(o=>OBJ_WORD[o]||null).filter(Boolean):[];
+  $('lookLine').textContent='In this picture: '+who+(objs.length?objs.join(', ').toLowerCase()+', ':'')+(describe(LOOK)||'soft, even tones')+
+     (LOOK.detecting?'. Looking for people…':'')+`. Treated as ${subj==='art'?'art':subj==='people'?'a photo of people':'a '+subj+' photo'}.`;
+}
 function showTitleIdeas(){
   if(!LOOK){ $('titleSugWrap').hidden=true; return; }
   const box=$('titleSug'); box.innerHTML='';
@@ -1111,12 +1188,17 @@ function showTitleIdeas(){
     b.onclick=()=>{ state.title=t; TITLE_SPACE={title:t,space:o.space}; $('capTitle').value=t; $('title').value=t; persist(); buildCaption(); refresh(); }; box.appendChild(b); }
   $('titleSugWrap').hidden=false;
 }
+function applyLook(){
+  const subj=subjectOf(LOOK);
+  state.capStyle = subj==='art' ? LOOK.style : 'photo';
+  $('capStyleChips').querySelectorAll('.chip').forEach(c=>c.setAttribute('aria-pressed',c.dataset.val===state.capStyle));
+  setLookLine(); showTitleIdeas(); buildCaption();
+}
 function onArtLoaded(){
-  LOOK=inspect(ART.img); titleSeed=Math.floor(Math.random()*1e6)+1;
-  $('lookLine').textContent='In this picture: '+(describe(LOOK)||'soft, even tones')+'. Titles and hashtags below follow it.';
-  state.capStyle=LOOK.style; $('capStyleChips').querySelectorAll('.chip').forEach(c=>c.setAttribute('aria-pressed',c.dataset.val===state.capStyle));
+  const look=inspect(ART.img); LOOK=look; titleSeed=Math.floor(Math.random()*1e6)+1;
   state.title=''; $('capTitle').value=''; $('title').value='';
-  showTitleIdeas(); buildCaption();
+  look.detecting=true; applyLook();
+  detectObjects(ART.img).then(det=>{ look.detecting=false; look.det=det; if(LOOK===look) applyLook(); });
 }
 
 /* ---------- captions & hashtags (offline, no AI service) ---------- */
@@ -1150,6 +1232,7 @@ function recentTags(){ try{ return JSON.parse(localStorage.getItem('nw-recent-ta
 function buildTags(r){
   const ig = state.capPlat==='ig';
   const pt = LOOK ? pictureTags(LOOK) : {colour:[],texture:[]};
+  if(!ig && LOOK && subjectOf(LOOK)!=='art') return [PHOTO_TAGS[subjectOf(LOOK)][0],'#photography'];
   if(!ig){ // X: one or two tags work best
     const main = state.capStyle==='photo'?'#photography':state.capStyle==='generative'?'#generativeart':state.capStyle==='abstract'?'#abstractart':'#glitchart';
     const extra = pt.texture.filter(t=>t!==main)[0] || pt.colour[0] || '#digitalart';
@@ -1163,6 +1246,10 @@ function buildTags(r){
   const left=()=>5-out.length;
   const take=(list,n)=>{ const fresh=shuffle(list.filter(t=>!recent.has(t)&&!out.includes(t)),r), old=shuffle(list.filter(t=>recent.has(t)&&!out.includes(t)),r);
     out.push(...fresh.concat(old).slice(0,n)); };
+  const subj=subjectOf(LOOK);
+  if(LOOK && subj!=='art'){ take(PHOTO_TAGS[subj],2); if(state.capCta==='prints'&&left()>0) take(TAGS.prints,1);
+    if(left()>0) take(pt.colour.length?pt.colour:TAGS.photo,1); while(left()>0){ const b=out.length; take(TAGS.photo,1); if(out.length===b) break; }
+    return out.slice(0,5); }
   // Instagram allows only 5 hashtags per post (since Dec 2025), so pick 5 specific ones
   const styleMain={glitch:'#glitchart',abstract:'#abstractart',photo:'#abstractphotography',generative:'#generativeart'}[state.capStyle];
   if(!out.includes(styleMain)) out.push(styleMain);
@@ -1180,7 +1267,9 @@ function buildCaption(){
   const tl = LOOK ? TRAIT_LINES(LOOK) : [];
   const space = TITLE_SPACE && TITLE_SPACE.title===title ? TITLE_SPACE.space : null;
   let opener;
-  if(LOOK && (space || r()<0.5)) opener = describeLine(space || pick(['place','room','world','space'],r), LOOK, r);
+  const subj=subjectOf(LOOK);
+  if(LOOK && subj!=='art') opener=pick(PHOTO_LINES[subj](LOOK),r);
+  else if(LOOK && (space || r()<0.5)) opener = describeLine(space || pick(['place','room','world','space'],r), LOOK, r);
   else opener = tl.length && r()<0.6 ? pick(tl,r) : pick(OPENERS[state.capStyle],r);
   if(title) lines.push(title);
   const body=[opener];
@@ -1209,6 +1298,8 @@ function fallbackCopy(t,msg){ const ta=document.createElement('textarea'); ta.va
 function rememberTags(){ try{ const r=recentTags().concat(CAP.tags).slice(-40); localStorage.setItem('nw-recent-tags',JSON.stringify(r)); }catch(e){} }
 const capRefresh=()=>{ persist(); buildCaption(); };
 function capChips(el,items,key){ chips(el,items,key); el.querySelectorAll('.chip').forEach(b=>{ const o=b.onclick; b.onclick=()=>{o(); buildCaption();}; }); }
+chips($('subjectChips'),[['auto','Auto'],['art','Art'],['people','People'],['place','Place'],['nature','Nature']],'subject');
+$('subjectChips').querySelectorAll('.chip').forEach(b=>{ const o=b.onclick; b.onclick=()=>{ o(); titleSeed=Math.floor(Math.random()*1e6)+1; if(LOOK) applyLook(); }; });
 capChips($('capPlatChips'),[['ig','Instagram'],['x','Twitter / X']],'capPlat');
 capChips($('capStyleChips'),[['glitch','Glitch'],['abstract','Abstract'],['photo','Photo'],['generative','Generative']],'capStyle');
 capChips($('capAppChips'),[['Glitchlab','Glitchlab'],['Chromalab','Chromalab'],['Onelab','Onelab'],['none','Don\'t say']],'capApp');
