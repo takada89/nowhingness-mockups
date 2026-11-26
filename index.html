@@ -149,7 +149,10 @@ textarea{width:100%;min-height:170px;background:var(--chip);border:0;border-radi
     <h2>Caption &amp; hashtags</h2>
     <div class="panel" style="padding:4px 14px 12px">
       <div class="row"><label>Post for</label><div class="chips" id="capPlatChips"></div></div>
+      <div class="hint" id="lookLine" style="margin-top:10px">Pick your art and I'll suggest titles and hashtags from its colours and texture.</div>
       <div class="row"><label>Title</label><input type="text" id="capTitle" placeholder="Untitled" maxlength="60"></div>
+      <div id="titleSugWrap" hidden><div class="chips" id="titleSug" style="margin:6px 0;flex-wrap:wrap;padding:0"></div>
+        <button class="chip" id="titleMore" style="margin-bottom:8px">More title ideas</button></div>
       <div class="row"><label>Style</label><div class="chips" id="capStyleChips"></div></div>
       <div class="row"><label>Made with</label><div class="chips" id="capAppChips"></div></div>
       <div class="row"><label>Mood (optional)</label><input type="text" id="capMood" placeholder="e.g. late night signal noise" maxlength="80"></div>
@@ -830,6 +833,7 @@ $('file').onchange=async e=>{
     ART={img,w,h,mid:shrink(img,w,h,1400),small:shrink(img,w,h,48),tiny:shrink(img,w,h,10),glow:makeGlow(img,w,h),pal:analyse(img),name:f.name.replace(/\.[^.]+$/,'')};
     state.focus={x:.5,y:.5}; state.pan={x:.5,y:.5}; for(const k in QUADS) delete QUADS[k];
     $('empty').hidden=true; $('pickBtn2').hidden=false; $('saveOne').disabled=false; $('saveCarousel').disabled=false;
+    try{ onArtLoaded(); }catch(err){ console.error(err); }
     refresh();
   }catch(err){ toast('Could not open that image'); console.error(err); }
   busy(false); e.target.value='';
@@ -877,11 +881,110 @@ $('saveCarousel').onclick=()=>exportSet([['clean','1-full'],['detail','2-detail'
 function busy(on){ $('busy').classList.toggle('show',on); }
 let tt; function toast(t){ const el=$('toast'); el.textContent=t; el.classList.add('show'); clearTimeout(tt); tt=setTimeout(()=>el.classList.remove('show'),2200); }
 
+/* ---------- reading the picture (colours + texture, all on the phone) ---------- */
+const HUES=[[15,'red'],[40,'orange'],[65,'yellow'],[150,'green'],[185,'teal'],[205,'cyan'],[250,'blue'],[280,'violet'],[320,'magenta'],[345,'pink'],[360,'red']];
+function inspect(img){
+  const n=160, sm=shrink(img,img.naturalWidth||img.width,img.naturalHeight||img.height,n), w=sm.width, h=sm.height;
+  const d=sm.getContext('2d',{willReadFrequently:true}).getImageData(0,0,w,h).data;
+  const L=new Float32Array(w*h), cnt={}; let sumL=0,sumS=0,warm=0,cool=0,rg=[],yb=[],chrom=0;
+  for(let i=0,k=0;i<d.length;i+=4,k++){
+    const r=d[i]/255,g=d[i+1]/255,b=d[i+2]/255, mx=Math.max(r,g,b), mn=Math.min(r,g,b), l=0.2126*r+0.7152*g+0.0722*b;
+    L[k]=l; sumL+=l; const sat=mx?(mx-mn)/mx:0; sumS+=sat; rg.push(r-g); yb.push((r+g)/2-b);
+    let name;
+    if(sat<(mx>0.75?0.08:0.22)||mx<0.18){ name = mx<0.2?'black': l>0.8?'white':'grey'; }
+    else { chrom++; let hh; if(mx===r)hh=((g-b)/(mx-mn)+6)%6; else if(mx===g)hh=(b-r)/(mx-mn)+2; else hh=(r-g)/(mx-mn)+4; hh*=60;
+      name=HUES.find(([lim])=>hh<lim)[1]; if(name==='red'||name==='orange'||name==='yellow'||name==='pink'||name==='magenta') warm++; else cool++; }
+    cnt[name]=(cnt[name]||0)+1;
+  }
+  const N=w*h, meanL=sumL/N, meanS=sumS/N;
+  let varL=0; for(let k=0;k<N;k++) varL+=(L[k]-meanL)**2; const contrast=Math.sqrt(varL/N);
+  const sd=a=>{const m=a.reduce((x,y)=>x+y,0)/a.length; return Math.sqrt(a.reduce((x,y)=>x+(y-m)**2,0)/a.length);};
+  const mean=a=>a.reduce((x,y)=>x+y,0)/a.length;
+  const colourfulness=Math.hypot(sd(rg),sd(yb))+0.3*Math.hypot(mean(rg),mean(yb));
+  // texture: horizontal vs vertical change (glitch bands), overall detail, mirror symmetry
+  let dh=0,dv=0,sym=0;
+  for(let y=0;y<h;y++) for(let x=0;x<w;x++){ const k=y*w+x;
+    if(x<w-1) dh+=Math.abs(L[k]-L[k+1]); if(y<h-1) dv+=Math.abs(L[k]-L[k+w]); if(x<w/2) sym+=Math.abs(L[k]-L[y*w+(w-1-x)]); }
+  dh/=(w-1)*h; dv/=w*(h-1); sym/=(Math.floor(w/2)*h);
+  const colours=Object.entries(cnt).filter(([k,v])=>v/N>0.1).sort((a,b)=>b[1]-a[1]).map(([k])=>k);
+  const hueNames=colours.filter(c=>!['black','white','grey'].includes(c));
+  const t={colours, hues:hueNames, many: Object.entries(cnt).filter(([k,v])=>!['black','white','grey'].includes(k)&&v/N>0.06).length>=4,
+    dark:meanL<0.3, bright:meanL>0.68, vivid:colourfulness>0.38||meanS>0.55, muted:meanS<0.2, mono:chrom/N<0.08,
+    pastel:meanL>0.62&&meanS>0.05&&meanS<0.45&&chrom/N>0.3, highContrast:contrast>0.27,
+    bandsH: dv>dh*1.6 && dv>0.04, bandsV: dh>dv*1.6 && dh>0.04, busy:(dh+dv)/2>0.05, minimal:(dh+dv)/2<0.006,
+    symmetric: sym<0.12*contrast && (dh+dv)/2>0.005, warm:warm>cool*1.8, cool:cool>warm*1.8};
+  t._dbg={dh,dv,sym,meanS,colourfulness,contrast,symr:sym/contrast};
+  t.style = t.bandsH||t.bandsV ? 'glitch' : t.symmetric ? 'generative' : (t.mono&&!t.busy)||(!t.vivid&&!t.minimal&&!t.many) ? 'photo' : 'abstract';
+  return t;
+}
+function describe(t){
+  const bits=[];
+  if(t.mono) bits.push('black & white'); else if(t.many) bits.push('many colours'); else if(t.hues.length) bits.push(t.hues.slice(0,2).join(' & '));
+  if(t.bandsH) bits.push('horizontal glitch bands'); else if(t.bandsV) bits.push('vertical streaks');
+  if(t.symmetric) bits.push('mirrored'); if(t.dark) bits.push('dark'); if(t.bright) bits.push('bright'); if(t.pastel) bits.push('pastel');
+  if(t.vivid&&!t.mono) bits.push('vivid'); if(t.highContrast) bits.push('high contrast'); if(t.busy) bits.push('busy'); if(t.minimal) bits.push('minimal');
+  return bits.join(', ');
+}
+const CWORDS={red:['Red','Crimson','Scarlet'],orange:['Amber','Orange','Tangerine'],yellow:['Yellow','Gold','Citrine'],green:['Green','Acid','Jade'],
+  teal:['Teal','Lagoon','Verdigris'],cyan:['Cyan','Ice','Aqua'],blue:['Blue','Cobalt','Ultramarine'],violet:['Violet','Ultraviolet','Lavender'],
+  magenta:['Magenta','Fuchsia','Neon'],pink:['Pink','Rose','Bubblegum'],black:['Black','Ink','Obsidian'],white:['White','Paper','Bone'],grey:['Grey','Ash','Concrete']};
+function titleIdeas(t,r){
+  const nouns=[];
+  if(t.bandsH||t.bandsV) nouns.push('Signal','Static','Scanline','Interference','Dropout','Drift','Bleed','Feedback');
+  if(t.symmetric) nouns.push('Mirror','Portal','Altar','Bloom','Mandala');
+  if(t.dark) nouns.push('Afterhours','Midnight','Void','Undertow');
+  if(t.bright) nouns.push('Flare','Daylight','Overexposure');
+  if(t.busy) nouns.push('Overload','Swarm','Noise','Crowd');
+  if(t.minimal) nouns.push('Hush','Stillness','Quiet');
+  if(t.warm) nouns.push('Heat','Ember','Sunburn'); if(t.cool) nouns.push('Frost','Tide','Coolant');
+  if(t.pastel) nouns.push('Daydream','Candy','Haze');
+  nouns.push('Fragment','Memory','Echo','Residue','Transmission');
+  const cw=(t.mono?['black','white']:t.hues.length?t.hues:['grey']).flatMap(c=>CWORDS[c]||[]);
+  const N=()=>pick(nouns,r), C=()=>pick(cw,r), num=()=>String(Math.floor(r()*9000)+1000);
+  const forms=[()=>`${C()} ${N()}`,()=>`${N()} in ${C()}`,()=>`${N().toUpperCase()}_${num()}`,()=>`${C()} ${N()} II`,
+               ()=>`Untitled (${C().toLowerCase()} ${N().toLowerCase()})`,()=>`${N()} / ${N()}`,()=>`The ${C()} ${N()}`];
+  const out=new Set(); let guard=0; while(out.size<6&&guard++<60){ const f=pick(forms,r)(); if(!/(\b\w+\b).*\b\1\b/i.test(f)) out.add(f); }
+  return [...out];
+}
+const PIC_TAGS={red:['#redaesthetic','#redart'],orange:['#orangeaesthetic'],yellow:['#yellowaesthetic'],green:['#greenaesthetic'],teal:['#tealaesthetic'],
+  cyan:['#cyan','#blueaesthetic'],blue:['#blueaesthetic','#bluetones'],violet:['#purpleaesthetic','#violet'],magenta:['#magenta','#pinkaesthetic'],pink:['#pinkaesthetic','#pinkart']};
+function pictureTags(t){
+  const colour=[], texture=[];
+  if(t.mono) colour.push('#blackandwhite','#monochrome'); else if(t.many) colour.push('#colorful','#rainbowart');
+  else t.hues.slice(0,2).forEach(c=>colour.push(...(PIC_TAGS[c]||[])));
+  if(t.pastel) colour.push('#pastelart'); if(t.vivid&&!t.mono) colour.push('#neonart','#vibrantart'); if(t.dark) colour.push('#darkart','#darkaesthetic');
+  if(t.bandsH||t.bandsV) texture.push('#pixelsorting','#databending','#scanlines');
+  if(t.symmetric) texture.push('#symmetry','#kaleidoscope');
+  if(t.busy) texture.push('#maximalism','#chaosart'); if(t.minimal) texture.push('#minimalart','#minimalism');
+  if(t.highContrast&&!texture.length) texture.push('#highcontrast');
+  return {colour,texture};
+}
+const TRAIT_LINES=t=>{ const l=[], h=t.hues;
+  if(h.length>=2) l.push(`${h[0][0].toUpperCase()+h[0].slice(1)} bleeding into ${h[1]}.`);
+  if(t.bandsH) l.push('Scanlines all the way down.'); if(t.symmetric) l.push('Folded into itself.');
+  if(t.dark) l.push('Made for after midnight.'); if(t.bright) l.push('Turned all the way up.'); if(t.mono) l.push('No colour, just signal.');
+  if(t.busy) l.push('Too much on purpose.'); if(t.minimal) l.push('Less noise, more space.'); return l; };
+let LOOK=null, titleSeed=1;
+function showTitleIdeas(){
+  if(!LOOK){ $('titleSugWrap').hidden=true; return; }
+  const box=$('titleSug'); box.innerHTML='';
+  for(const t of titleIdeas(LOOK,rng(titleSeed))){ const b=document.createElement('button'); b.className='chip'; b.textContent=t;
+    b.onclick=()=>{ state.title=t; $('capTitle').value=t; $('title').value=t; persist(); buildCaption(); refresh(); }; box.appendChild(b); }
+  $('titleSugWrap').hidden=false;
+}
+function onArtLoaded(){
+  LOOK=inspect(ART.img); titleSeed=Math.floor(Math.random()*1e6)+1;
+  $('lookLine').textContent='In this picture: '+(describe(LOOK)||'soft, even tones')+'. Titles and hashtags below follow it.';
+  state.capStyle=LOOK.style; $('capStyleChips').querySelectorAll('.chip').forEach(c=>c.setAttribute('aria-pressed',c.dataset.val===state.capStyle));
+  state.title=''; $('capTitle').value=''; $('title').value='';
+  showTitleIdeas(); buildCaption();
+}
+
 /* ---------- captions & hashtags (offline, no AI service) ---------- */
 const TAGS = {
   core:   ['#digitalart','#abstractart','#contemporaryart','#artoftheday','#newmediaart','#visualart','#artistsoninstagram','#digitalartist'],
   glitch: ['#glitchart','#glitch','#glitchaesthetic','#databending','#pixelsorting','#glitchartist','#digitalglitch','#glitchy','#vaporwave','#experimentalart'],
-  colour: ['#colorful','#colourful','#chromatic','#colorstudy','#vibrantart','#neonart','#psychedelicart','#abstractdigitalart'],
+  colour: ['#colorful','#chromatic','#colorstudy','#vibrantart','#neonart','#psychedelicart','#abstractdigitalart'],
   mobile: ['#mobileart','#phoneart','#mobileartistry','#appart','#mobileediting','#madeonmobile'],
   photo:  ['#photography','#abstractphotography','#experimentalphotography','#photoart','#fineartphotography','#creativephotography','#editedphoto'],
   gen:    ['#generativeart','#creativecoding','#proceduralart','#algorithmicart','#computerart'],
@@ -907,15 +1010,19 @@ let capSeed = Date.now()%100000+1;
 function recentTags(){ try{ return JSON.parse(localStorage.getItem('nw-recent-tags')||'[]'); }catch(e){ return []; } }
 function buildTags(r){
   const ig = state.capPlat==='ig';
+  const pt = LOOK ? pictureTags(LOOK) : {colour:[],texture:[]};
   if(!ig){ // X: one or two tags work best
     const main = state.capStyle==='photo'?'#photography':state.capStyle==='generative'?'#generativeart':state.capStyle==='abstract'?'#abstractart':'#glitchart';
-    return [main,'#digitalart'];
+    const extra = pt.texture.filter(t=>t!==main)[0] || pt.colour[0] || '#digitalart';
+    return [main, extra];
   }
   const recent=new Set(recentTags()), sets=STYLE_SETS[state.capStyle], out=[];
   const take=(list,n)=>{ const fresh=shuffle(list.filter(t=>!recent.has(t)&&!out.includes(t)),r), old=shuffle(list.filter(t=>recent.has(t)&&!out.includes(t)),r);
     out.push(...fresh.concat(old).slice(0,n)); };
   // Instagram allows only 5 hashtags per post (since Dec 2025), so pick 5 specific ones
-  take(TAGS[sets[0]],2); take(TAGS[sets[1]],1); take(TAGS[sets[2]],1);
+  if(LOOK){ // 2 for the style, 1 for the colours, 1 for the texture, 1 general/prints
+    take(TAGS[sets[0]],2); take(pt.colour.length?pt.colour:TAGS[sets[1]],1); take(pt.texture.length?pt.texture:TAGS[sets[2]],1);
+  } else { take(TAGS[sets[0]],2); take(TAGS[sets[1]],1); take(TAGS[sets[2]],1); }
   take(state.capCta==='prints'?TAGS.prints:TAGS.core,1);
   return out;   // 5 tags, a different mix each time
 }
@@ -924,8 +1031,10 @@ function buildCaption(){
   const r=rng(capSeed), ig=state.capPlat==='ig';
   const title=(state.title||'').trim(), mood=(state.capMood||'').trim(), name=(state.sigText||'Nowhingness').trim();
   const lines=[];
-  lines.push(title?`"${title}"`:pick(OPENERS[state.capStyle],r));
-  if(title) lines.push(pick(OPENERS[state.capStyle],r));
+  const tl = LOOK ? TRAIT_LINES(LOOK) : [];
+  const opener = tl.length && r()<0.6 ? pick(tl,r) : pick(OPENERS[state.capStyle],r);
+  lines.push(title?`"${title}"`:opener);
+  if(title) lines.push(opener);
   if(mood) lines.push(mood.charAt(0).toUpperCase()+mood.slice(1)+(/[.!?]$/.test(mood)?'':'.'));
   if(state.capApp!=='none' && ig) lines.push(`Made on my phone with ${state.capApp}.`);
   const cta=pick(CTAS[state.capCta],r); if(cta) lines.push(cta);
@@ -960,6 +1069,7 @@ $('capTitle').value=state.title; $('capTitle').oninput=e=>{ state.title=e.target
 $('title').addEventListener('input',()=>{ $('capTitle').value=state.title; buildCaption(); });
 $('sigText').addEventListener('input',buildCaption);
 $('capMood').value=state.capMood; $('capMood').oninput=e=>{ state.capMood=e.target.value; capRefresh(); };
+$('titleMore').onclick=()=>{ titleSeed=Math.floor(Math.random()*1e6)+1; showTitleIdeas(); };
 $('capNew').onclick=()=>{ capSeed=Math.floor(Math.random()*1e6)+1; buildCaption(); };
 $('capCopy').onclick=()=>{ copyText($('capOut').value,'Caption copied'); rememberTags(); };
 $('capCopyTags').onclick=()=>{ copyText(CAP.tags.join(' '),'Hashtags copied'); rememberTags(); };
