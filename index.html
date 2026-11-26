@@ -78,7 +78,7 @@ textarea{width:100%;min-height:170px;background:var(--chip);border:0;border-radi
 .overlay .piece .thumbs img{width:100%;max-height:none;border-radius:6px}
 .overlay .piece textarea{min-height:120px}
 .overlay p{color:var(--muted);font-size:13px;text-align:center;margin:8px 0}
-.toast{position:fixed;left:50%;bottom:100px;transform:translateX(-50%);background:#fff;color:#111;padding:10px 16px;border-radius:999px;font-size:14px;z-index:20;opacity:0;transition:.25s;pointer-events:none}
+.toast{position:fixed;left:50%;bottom:100px;transform:translateX(-50%);background:#fff;color:#111;padding:10px 16px;border-radius:14px;font-size:14px;max-width:92vw;text-align:center;z-index:20;opacity:0;transition:.25s;pointer-events:none}
 .toast.show{opacity:1}
 .busy{position:fixed;inset:0;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,.5);z-index:15;font-weight:600}
 .busy.show{display:flex}
@@ -1372,7 +1372,22 @@ $('title').addEventListener('input',()=>{ $('capTitle').value=state.title; build
 $('sigText').addEventListener('input',buildCaption);
 $('capMood').value=state.capMood; $('capMood').oninput=e=>{ state.capMood=e.target.value; capRefresh(); };
 /* ---------- AI titles with Google Gemini (optional, user's own free key, stored only on this device) ---------- */
-const GEMINI_MODELS=['gemini-2.5-flash','gemini-flash-latest','gemini-2.0-flash']; let GEMINI_WAIT=40000;
+const GEMINI_MODELS=['gemini-flash-latest','gemini-2.5-flash']; let GEMINI_WAIT=40000;
+// Ask Google which models this key can use, newest Flash first (models get retired, so don't hard-code them)
+async function geminiModels(key){
+  try{
+    const r=await fetch('https://generativelanguage.googleapis.com/v1beta/models?pageSize=1000',{headers:{'x-goog-api-key':key},signal:AbortSignal.timeout?AbortSignal.timeout(15000):undefined});
+    if(!r.ok) return GEMINI_MODELS;
+    const list=((await r.json()).models||[]).filter(m=>(m.supportedGenerationMethods||[]).includes('generateContent'))
+      .map(m=>String(m.name||'').replace(/^models\//,''))
+      .filter(n=>/flash/i.test(n)&&!/image|tts|audio|live|embed|think|exp|robotics|computer/i.test(n));
+    const ver=n=>{ const v=n.match(/gemini-(\d+(?:\.\d+)?)/); return v?parseFloat(v[1]):0; };
+    const score=n=>ver(n)*10-(/lite/.test(n)?3:0)-(/preview/.test(n)?1:0)-(/latest/.test(n)?0.5:0)-(/-\d{3}$|\d{2}-\d{4}/.test(n)?0.2:0);
+    list.sort((a,b)=>score(b)-score(a));
+    const out=[...new Set(list)].slice(0,4);
+    return out.length?out:GEMINI_MODELS;
+  }catch(e){ return GEMINI_MODELS; }
+}
 function aiKey(){ try{ return localStorage.getItem('nw-gemini-key')||''; }catch(e){ return ''; } }
 function aiPrompt(){
   const app=state.capApp!=='none'?state.capApp:null, name=(state.sigText||'Nowhingness').trim();
@@ -1392,11 +1407,12 @@ async function aiTitles(){
   $('busyCancel').hidden=false; $('busyCancel').onclick=()=>{ cancelled=true; if(ctrl) ctrl.abort(); };
   try{
     const c=shrink(ART.img,ART.w,ART.h,640), b64=c.toDataURL('image/jpeg',0.82).split(',')[1];
-    let res, lastErr='';
-    for(const m of GEMINI_MODELS){
+    $('busyText').textContent='Asking Gemini… checking models'; const models=await geminiModels(key); label();
+    let res, lastErr='', errs=[];
+    for(const m of models){
       if(cancelled) break;
       const gen={responseMimeType:'application/json',temperature:1.0};
-      if(m==='gemini-2.5-flash') gen.thinkingConfig={thinkingBudget:0};          // no slow "thinking" step
+      if(/^gemini-2\.5-flash/.test(m)) gen.thinkingConfig={thinkingBudget:0};          // no slow "thinking" step
       const body={contents:[{parts:[{text:aiPrompt()},{inline_data:{mime_type:'image/jpeg',data:b64}}]}],generationConfig:gen};
       ctrl=new AbortController(); timedOut=false;
       const timer=setTimeout(()=>{ timedOut=true; ctrl.abort(); },GEMINI_WAIT);
@@ -1404,15 +1420,15 @@ async function aiTitles(){
         const r=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${m}:generateContent`,{method:'POST',
           headers:{'Content-Type':'application/json','x-goog-api-key':key},body:JSON.stringify(body),signal:ctrl.signal});
         if(r.ok){ res=await r.json(); break; }
-        const err=await r.json().catch(()=>({})); lastErr=(err.error&&err.error.message)||('HTTP '+r.status);
+        const err=await r.json().catch(()=>({})); lastErr=(err.error&&err.error.message)||('HTTP '+r.status); errs.push(m+': '+lastErr);
         if(r.status===401||r.status===403||r.status===429||/API key|API_KEY/i.test(lastErr)) break;   // bad key or limit: other models won't help
       }catch(e){
         if(cancelled) break;
-        lastErr=timedOut?'no answer after '+GEMINI_WAIT/1000+' seconds':(e.message||'network error');
+        lastErr=timedOut?'no answer after '+GEMINI_WAIT/1000+' seconds':(e.message||'network error'); errs.push(m+': '+lastErr);
       }finally{ clearTimeout(timer); }
     }
     if(cancelled){ toast('Cancelled'); return; }
-    if(!res) throw new Error(lastErr||'No answer');
+    if(!res){ console.warn('Gemini errors',errs); throw new Error((errs.length>1?errs.map(x=>x.slice(0,70)).join(' / '):lastErr)||'No answer'); }
     const txt=res.candidates?.[0]?.content?.parts?.map(p=>p.text||'').join('')||'';
     if(!txt) throw new Error(res.promptFeedback?.blockReason?'it refused this image ('+res.promptFeedback.blockReason+')':'empty answer');
     const data=JSON.parse(txt.replace(/^```(json)?|```$/g,'').trim());
@@ -1422,7 +1438,7 @@ async function aiTitles(){
     if(LOOK===look){ look.ai={titles,hashtags}; showTitleIdeas(); buildCaption(); toast('AI titles ready'); }
   }catch(e){
     console.warn(e); const m=String(e.message||e);
-    toast(/API key|API_KEY|permission|401|403/i.test(m)?'Gemini did not accept the key. Check it and paste again.':/quota|429|exhausted/i.test(m)?'Gemini free limit reached. Try again later.':/JSON/i.test(m)?'Gemini answered in a strange format. Tap ✦ AI titles again.':'Gemini did not answer: '+m.slice(0,90),6000);
+    toast(/API key|API_KEY|permission|401|403/i.test(m)?'Gemini did not accept the key. Check it and paste again.':/quota|429|exhausted/i.test(m)?'Gemini free limit reached. Try again later.':/JSON/i.test(m)?'Gemini answered in a strange format. Tap ✦ AI titles again.':'Gemini did not answer: '+m.slice(0,220),9000);
     if(/API key|API_KEY|401|403/i.test(m)) $('aiKeyBox').hidden=false;
   }finally{
     clearInterval(tick); $('busyCancel').hidden=true; $('busyCancel').onclick=null;
