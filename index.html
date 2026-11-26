@@ -163,7 +163,7 @@ textarea{width:100%;min-height:170px;background:var(--chip);border:0;border-radi
       <div class="row"><label>Subject</label><div class="chips" id="subjectChips"></div></div>
       <div class="row"><label>Title</label><input type="text" id="capTitle" placeholder="Untitled" maxlength="60"></div>
       <div id="titleSugWrap" hidden><div class="chips" id="titleSug" style="margin:6px 0;flex-wrap:wrap;padding:0"></div>
-        <div class="btnrow" style="margin-top:0"><button class="chip" id="aiTitles" aria-pressed="true">✦ AI titles (Gemini)</button><button class="chip" id="titleMore">More title ideas</button><button class="chip" id="gptPrompt">Copy prompt for ChatGPT</button><button class="chip" id="aiKeyToggle">🔑 Change Gemini key</button></div>
+        <div class="btnrow" style="margin-top:0"><button class="chip" id="aiTitles" aria-pressed="true">✦ AI titles (Gemini)</button><button class="chip" id="titleMore">More title ideas</button><button class="chip" id="aiKeyToggle">🔑 Change Gemini key</button></div>
         <div id="aiKeyBox" hidden style="background:#15151a;border-radius:10px;padding:10px 12px;margin-bottom:8px">
           <div class="hint" style="margin-top:0">AI titles use Google's Gemini, which is free with daily limits. Get a key at <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener" style="color:var(--accent2)">aistudio.google.com/apikey</a> (sign in with Google, then tap "Create API key"), and paste it here. It's saved only on this device. When you use it, the picture is sent to Google, and on the free tier Google may use it to improve its products.</div>
           <div class="row"><input type="text" id="aiKey" placeholder="Paste your Gemini API key" autocomplete="off" style="width:100%"></div>
@@ -173,6 +173,7 @@ textarea{width:100%;min-height:170px;background:var(--chip);border:0;border-radi
       <div class="row"><label>Made with</label><div class="chips" id="capAppChips"></div></div>
       <div class="row"><label>Mood (optional)</label><input type="text" id="capMood" placeholder="e.g. late night signal noise" maxlength="80"></div>
       <div class="row"><label>Ask people to</label><div class="chips" id="capCtaChips"></div></div>
+      <div class="row" id="aboutRow" style="display:none"><label>Explanation</label><div class="chips" id="capAboutChips"></div></div>
       <div class="row" id="tagPlaceRow"><label>Hashtags in</label><div class="chips" id="capTagPlaceChips"></div></div>
       <textarea id="capOut" aria-label="Caption"></textarea>
       <div class="btnrow">
@@ -194,7 +195,7 @@ textarea{width:100%;min-height:170px;background:var(--chip);border:0;border-radi
       <button class="btn primary" id="batchBtn" style="width:100%;margin-top:8px">Pick pieces for batch</button>
     </div>
   </section>
-  <section><p class="hint">Everything stays on your phone. Nothing is uploaded. <span style="opacity:.6">Version 17</span></p></section>
+  <section><p class="hint">Everything stays on your phone. Nothing is uploaded. <span style="opacity:.6">Version 18</span></p></section>
 </div>
 </main>
 
@@ -232,7 +233,7 @@ const SCENES = [
   ['gallery','Gallery'],['poster','Taped poster'],['desk','Desk print'],['tablet','Tablet'],['laptop','Laptop'],['monitor','Desktop monitor'],['clean','Clean border']
 ];
 const DEFAULTS = {scene:'frame',format:'ig45',wall:'auto',frame:'black',border:'auto',tilt:true,
-  title:'',blend:0.3,subject:'auto',batchMode:'carousel',capPlat:'ig',capStyle:'glitch',capApp:'Glitchlab',capMood:'',capCta:'save',capTagPlace:'caption',artSize:1,fillScreen:true,sig:true,sigText:'Nowhingness',sigStyle:'caps',sigPos:'br',zoom:2.5,focus:{x:.5,y:.5},pan:{x:.5,y:.5}};
+  title:'',blend:0.3,subject:'auto',batchMode:'carousel',capPlat:'ig',capStyle:'glitch',capApp:'Glitchlab',capMood:'',capCta:'save',capTagPlace:'caption',capAbout:'on',artSize:1,fillScreen:true,sig:true,sigText:'Nowhingness',sigStyle:'caps',sigPos:'br',zoom:2.5,focus:{x:.5,y:.5},pan:{x:.5,y:.5}};
 let state = Object.assign({}, DEFAULTS);
 try{ const s = JSON.parse(localStorage.getItem('nw-mockup-settings')||'null'); if(s) Object.assign(state, s, {focus:{x:.5,y:.5},pan:{x:.5,y:.5}}); }catch(e){}
 function persist(){ try{ const {focus, pan, ...rest} = state; localStorage.setItem('nw-mockup-settings', JSON.stringify(rest)); }catch(e){} }
@@ -1231,6 +1232,7 @@ const PHOTO_TAGS={
 };
 function setLookLine(){
   if(!LOOK) return; const subj=subjectOf(LOOK), d=LOOK.det;
+  if(LOOK.ai&&LOOK.ai.look){ $('lookLine').textContent='✦ In this picture (Gemini): '+LOOK.ai.look; return; }
   let who='';
   if(d && d.persons) who = d.persons===1?'1 person, ':`${d.persons} people, `;
   const objs = d? d.objects.map(o=>OBJ_WORD[o]||null).filter(Boolean):[];
@@ -1336,8 +1338,10 @@ function buildCaption(){
   if(title) lines.push(title);
   const body=[opener];
   if(mood) body.push(mood.charAt(0).toUpperCase()+mood.slice(1)+(/[.!?]$/.test(mood)?'':'.'));
-  const cta=pick(CTAS[state.capCta],r); if(cta) body.push(cta);
-  lines.push(body.join(' '));
+  const cta=pick(CTAS[state.capCta],r);
+  const about = ig && state.capAbout!=='off' && LOOK && LOOK.ai && LOOK.ai.about;
+  if(about){ lines.push(body.join(' ')); lines.push(about); if(cta) lines.push(cta); }
+  else { if(cta) body.push(cta); lines.push(body.join(' ')); }
   if(ig) lines.push(`— ${name}`);
   const tags=buildTags(r);
   let text;
@@ -1345,6 +1349,7 @@ function buildCaption(){
   else if(state.capTagPlace==='comment') text=lines.join('\n\n');
   else text=lines.join('\n\n')+'\n\n'+tags.join(' ');
   CAP={text,tags};
+  $('aboutRow').style.display = ig&&LOOK&&LOOK.ai&&LOOK.ai.about ? '' : 'none';
   $('capOut').value=text;
   $('tagPlaceRow').style.display = ig?'':'none';
   $('capCount').textContent = ig ? `${tags.length} hashtags. Instagram now allows 5 per post, so these are specific ones, shuffled each time` +
@@ -1367,6 +1372,7 @@ capChips($('capStyleChips'),[['glitch','Glitch'],['abstract','Abstract'],['photo
 capChips($('capAppChips'),[['Glitchlab','Glitchlab'],['Chromalab','Chromalab'],['Onelab','Onelab'],['none','Don\'t say']],'capApp');
 capChips($('capCtaChips'),[['save','Save'],['fav','Pick a slide'],['prints','Prints'],['follow','Follow'],['none','Nothing']],'capCta');
 capChips($('capTagPlaceChips'),[['caption','Caption'],['comment','First comment']],'capTagPlace');
+capChips($('capAboutChips'),[['on','✦ Add Gemini explanation'],['off','Short caption']],'capAbout');
 $('capTitle').value=state.title; $('capTitle').oninput=e=>{ state.title=e.target.value; $('title').value=state.title; capRefresh(); refresh(); };
 $('title').addEventListener('input',()=>{ $('capTitle').value=state.title; buildCaption(); });
 $('sigText').addEventListener('input',buildCaption);
@@ -1395,7 +1401,9 @@ function aiPrompt(){
   const app=state.capApp!=='none'?state.capApp:null, name=(state.sigText||'Nowhingness').trim();
   return `You are naming an artwork by the digital artist ${name}${app?` (made on a phone with the app ${app})`:''}.
 Look closely at the image: the shapes, motion, texture, surface, colours and mood. If it is a photo, note who or what is in it.
-Return JSON only, in this shape: {"titles":[{"title":"...","line":"..."}],"hashtags":["#...","#...","#..."]}
+Return JSON only, in this shape: {"look":"...","about":"...","titles":[{"title":"...","line":"..."}],"hashtags":["#...","#...","#..."]}
+- "look": one plain sentence (under 25 words) saying what is actually in the image: subject, shapes, colours, surface.
+- "about": a short explanation of the piece for the caption, 2 or 3 sentences (40 to 70 words), written as the artist's own voice (first person is fine). Talk about what the eye does, the texture or process feel, and the mood or idea it suggests. Concrete and sensory, not gallery jargon; no clichés like "invites the viewer", "journey", "tapestry", "testament", "delve". No emojis or hashtags.
 - 6 titles, 2 to 4 words each, evocative and specific to what is visible, in the spirit of "Rosette Passage" (a concrete motif plus a place or feeling). No generic words like "Abstract", "Untitled", "Art", "Dream".
 - For each title, "line" is one caption sentence in this style: "A corridor built from color, pattern, and noise." Keep it under 15 words, no emojis, no hashtags.
 - 3 Instagram hashtags that are specific to this image (lowercase, no spaces). Do not include #${name.toLowerCase().replace(/[^a-z0-9_]/g,'')}${app?` or #${app.toLowerCase()}`:''}.`;
@@ -1445,7 +1453,8 @@ async function aiTitles(){
     const titles=(data.titles||[]).filter(o=>o&&o.title).slice(0,6).map(o=>({title:String(o.title).trim(),line:String(o.line||'').trim()}));
     const hashtags=(data.hashtags||[]).map(h=>'#'+String(h).replace(/^#/,'').toLowerCase().replace(/[^a-z0-9_]/g,'')).filter(h=>h.length>2).slice(0,3);
     if(!titles.length) throw new Error('empty answer');
-    if(LOOK===look){ look.ai={titles,hashtags}; showTitleIdeas(); buildCaption(); toast('AI titles ready'); }
+    const clean=v=>String(v||'').replace(/\s+/g,' ').trim().slice(0,600);
+    if(LOOK===look){ look.ai={titles,hashtags,look:clean(data.look),about:clean(data.about)}; setLookLine(); showTitleIdeas(); buildCaption(); toast('AI titles ready'); }
   }catch(e){
     console.warn(e); const m=String(e.message||e);
     toast(/API key|API_KEY|permission|401|403/i.test(m)?'Gemini did not accept the key. Check it and paste again.':/quota|429|exhausted/i.test(m)?'Gemini free limit reached. Try again later.':/JSON/i.test(m)?'Gemini answered in a strange format. Tap ✦ AI titles again.':'Gemini did not answer: '+m.slice(0,220),9000);
@@ -1461,16 +1470,6 @@ $('aiKeySave').onclick=()=>{ const k=$('aiKey').value.trim(); if(!k){ toast('Pas
   $('aiKey').value=''; $('aiKeyBox').hidden=true; aiTitles(); };
 $('aiKeyToggle').onclick=()=>{ const box=$('aiKeyBox'); box.hidden=!box.hidden; if(!box.hidden) $('aiKey').focus(); };
 $('aiKeyForget').onclick=()=>{ try{ localStorage.removeItem('nw-gemini-key'); }catch(e){} toast('Key removed from this device'); };
-$('gptPrompt').onclick=()=>{
-  const app=state.capApp!=='none'?state.capApp:null, name=(state.sigText||'Nowhingness').trim();
-  const seen=LOOK?describe(LOOK):'';
-  const txt=`Look at the artwork I'm attaching. It's by ${name}, digital art made on a phone${app?' with '+app:''}.
-1. Suggest 6 short, evocative titles (2-4 words, in the spirit of "Rosette Passage") that describe what is actually visible: the shapes, motion, texture and colours. No generic words.
-2. Write a one-line caption in this style: "A corridor built from color, pattern, and noise."
-3. Give exactly 5 Instagram hashtags: #${name.toLowerCase().replace(/[^a-z0-9_]/g,'')}${app?' #'+app.toLowerCase():''} plus ${app?3:4} specific to this image.
-No emojis.${seen?`\n(My app's quick read: ${seen}.)`:''}`;
-  copyText(txt,'Prompt copied. Paste it into ChatGPT with your image');
-};
 $('titleMore').onclick=()=>{ titleSeed=Math.floor(Math.random()*1e6)+1; showTitleIdeas(); };
 $('capNew').onclick=()=>{ capSeed=Math.floor(Math.random()*1e6)+1; buildCaption(); };
 $('capCopy').onclick=()=>{ copyText($('capOut').value,'Caption copied'); rememberTags(); };
