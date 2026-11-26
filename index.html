@@ -61,6 +61,11 @@ input[type=range]{width:55%;accent-color:var(--accent)}
 .btn.primary{background:linear-gradient(90deg,var(--accent),#ff7a45);color:#fff}
 .btn.secondary{background:#2a2a32;color:var(--text)}
 .btn:disabled{opacity:.4}
+textarea{width:100%;min-height:170px;background:var(--chip);border:0;border-radius:10px;color:var(--text);font:inherit;font-size:14px;padding:10px 12px;resize:vertical}
+.btnrow{display:flex;gap:8px;margin:10px 0 4px;flex-wrap:wrap}
+.btnrow .chip{flex:1;text-align:center}
+.plan{font-size:13px;color:var(--muted);margin:8px 0 4px;padding-left:18px}
+.plan li{margin:3px 0}
 .overlay{position:fixed;inset:0;background:#000;z-index:10;display:none;flex-direction:column;
   padding:calc(12px + env(safe-area-inset-top)) 16px calc(16px + env(safe-area-inset-bottom))}
 .overlay.open{display:flex}
@@ -109,7 +114,9 @@ input[type=range]{width:55%;accent-color:var(--accent)}
     <div class="panel">
       <div class="row"><label>Art size</label><input type="range" id="artSize" min="0.7" max="1.25" step="0.01"></div>
       <div class="row" data-for="frame,poster,gallery,desk,laptop"><label>Wall / desk</label><div class="chips" id="wallChips"></div></div>
-      <div class="row" data-for="frame,dark"><label>Frame</label><div class="chips" id="frameChips"></div></div>
+      <div class="row" data-for="custom"><label>Room photo</label><div class="chips"><button class="chip" id="pickBg">Pick photo</button><button class="chip" id="resetQuad">Reset corners</button></div></div>
+      <div class="row" data-for="custom"><label>Photo light on art</label><input type="range" id="blend" min="0" max="0.8" step="0.01"></div>
+      <div class="row" data-for="frame,dark,custom"><label>Frame</label><div class="chips" id="frameChips"></div></div>
       <div class="row" data-for="clean"><label>Border colour</label><div class="chips" id="borderChips"></div></div>
       <div class="row" data-for="phone,tablet,laptop,monitor"><label>Fill the screen (crops art)</label><label class="switch"><input type="checkbox" id="fill"><span></span></label></div>
       <div class="row" data-for="phone,tablet"><label>Tilt device</label><label class="switch"><input type="checkbox" id="tilt"><span></span></label></div>
@@ -138,6 +145,28 @@ input[type=range]{width:55%;accent-color:var(--accent)}
       </div>
     </div>
   </section>
+  <section>
+    <h2>Caption &amp; hashtags</h2>
+    <div class="panel" style="padding:4px 14px 12px">
+      <div class="row"><label>Post for</label><div class="chips" id="capPlatChips"></div></div>
+      <div class="row"><label>Title</label><input type="text" id="capTitle" placeholder="Untitled" maxlength="60"></div>
+      <div class="row"><label>Style</label><div class="chips" id="capStyleChips"></div></div>
+      <div class="row"><label>Made with</label><div class="chips" id="capAppChips"></div></div>
+      <div class="row"><label>Mood (optional)</label><input type="text" id="capMood" placeholder="e.g. late night signal noise" maxlength="80"></div>
+      <div class="row"><label>Ask people to</label><div class="chips" id="capCtaChips"></div></div>
+      <div class="row" id="tagPlaceRow"><label>Hashtags in</label><div class="chips" id="capTagPlaceChips"></div></div>
+      <textarea id="capOut" aria-label="Caption"></textarea>
+      <div class="btnrow">
+        <button class="chip" id="capNew">New version</button>
+        <button class="chip" id="capCopy" aria-pressed="true">Copy caption</button>
+        <button class="chip" id="capCopyTags">Copy hashtags</button>
+      </div>
+      <div class="hint" id="capCount"></div>
+      <details><summary class="hint" style="display:inline">Simple weekly posting plan</summary>
+        <ul class="plan" id="capPlan"></ul>
+      </details>
+    </div>
+  </section>
   <section><p class="hint">Everything stays on your phone. Nothing is uploaded.</p></section>
 </div>
 </main>
@@ -159,6 +188,7 @@ input[type=range]{width:55%;accent-color:var(--accent)}
 <div class="busy" id="busy">Rendering…</div>
 <div class="toast" id="toast"></div>
 <input type="file" id="file" accept="image/*" hidden>
+<input type="file" id="bgFile" accept="image/*" hidden>
 
 <script>
 "use strict";
@@ -170,11 +200,11 @@ const FORMATS = {
   x169:  {w:1600,h:900, label:'Twitter / X 16:9'}
 };
 const SCENES = [
-  ['frame','Framed on wall'],['dark','Dark room glow'],['phone','Phone screen'],
+  ['custom','My photo'],['frame','Framed on wall'],['dark','Dark room glow'],['phone','Phone screen'],
   ['gallery','Gallery'],['poster','Taped poster'],['desk','Desk print'],['tablet','Tablet'],['laptop','Laptop'],['monitor','Desktop monitor'],['clean','Clean border']
 ];
 const DEFAULTS = {scene:'frame',format:'ig45',wall:'auto',frame:'black',border:'auto',tilt:true,
-  title:'',artSize:1,fillScreen:true,sig:true,sigText:'Nowhingness',sigStyle:'caps',sigPos:'br',zoom:2.5,focus:{x:.5,y:.5},pan:{x:.5,y:.5}};
+  title:'',blend:0.3,capPlat:'ig',capStyle:'glitch',capApp:'Glitchlab',capMood:'',capCta:'save',capTagPlace:'caption',artSize:1,fillScreen:true,sig:true,sigText:'Nowhingness',sigStyle:'caps',sigPos:'br',zoom:2.5,focus:{x:.5,y:.5},pan:{x:.5,y:.5}};
 let state = Object.assign({}, DEFAULTS);
 try{ const s = JSON.parse(localStorage.getItem('nw-mockup-settings')||'null'); if(s) Object.assign(state, s, {focus:{x:.5,y:.5},pan:{x:.5,y:.5}}); }catch(e){}
 function persist(){ try{ const {focus, pan, ...rest} = state; localStorage.setItem('nw-mockup-settings', JSON.stringify(rest)); }catch(e){} }
@@ -595,6 +625,43 @@ const DRAW = {
     }
     signature(ctx,W,H,'rgba(255,255,255,.75)');
   },
+  custom(ctx,W,H){
+    const u=Math.min(W,H);
+    if(!BG){
+      ctx.fillStyle='#2a2a30'; ctx.fillRect(0,0,W,H);
+      ctx.fillStyle='#bbb'; ctx.textAlign='center'; ctx.font=`600 ${u*0.045}px system-ui,sans-serif`;
+      ctx.fillText('Tap "Pick photo" below',W/2,H*0.12); ctx.font=`${u*0.032}px system-ui,sans-serif`;
+      ctx.fillText('then drag the 4 corners onto a wall,',W/2,H*0.12+u*0.06); ctx.fillText('frame, screen or desk',W/2,H*0.12+u*0.105);
+    } else drawCover(ctx,BG.img,BG.w,BG.h,0,0,W,H);
+    const q=getQuad(W,H), Hm=sq2quad(q);
+    // frame + shadow around the art, following the same perspective
+    if(state.frame!=='none'){
+      const e=0.035, poly=[[-e,-e],[1+e,-e],[1+e,1+e],[-e,1+e]].map(([a,b])=>Hm(a,b));
+      ctx.save(); shadow(ctx,u*0.03,u*0.004,u*0.014,'rgba(0,0,0,.45)');
+      ctx.fillStyle = state.frame==='white'?'#f2f1ee':state.frame==='oak'?'#9f7448':'#141416';
+      ctx.beginPath(); poly.forEach(([x,y],i)=>i?ctx.lineTo(x,y):ctx.moveTo(x,y)); ctx.closePath(); ctx.fill(); ctx.restore();
+    } else {
+      ctx.save(); shadow(ctx,u*0.02,u*0.003,u*0.01,'rgba(0,0,0,.4)'); ctx.fillStyle='#000';
+      ctx.beginPath(); q.forEach(([x,y],i)=>i?ctx.lineTo(x,y):ctx.moveTo(x,y)); ctx.closePath(); ctx.fill(); ctx.restore();
+    }
+    const src = PREVIEW? ART.mid : ART.img;
+    warp(ctx,src,src.width||src.naturalWidth,src.height||src.naturalHeight,Hm,PREVIEW?14:28);
+    // let the photo's light and texture show through the art
+    if(BG && state.blend>0){
+      ctx.save(); ctx.beginPath(); q.forEach(([x,y],i)=>i?ctx.lineTo(x,y):ctx.moveTo(x,y)); ctx.closePath(); ctx.clip();
+      ctx.globalCompositeOperation='soft-light'; ctx.globalAlpha=state.blend; drawCover(ctx,BG.img,BG.w,BG.h,0,0,W,H);
+      ctx.globalCompositeOperation='multiply'; ctx.globalAlpha=state.blend*0.35; drawCover(ctx,BG.img,BG.w,BG.h,0,0,W,H);
+      ctx.restore();
+    }
+    if(PREVIEW){ // corner handles (preview only, never exported)
+      ctx.save(); ctx.setLineDash([u*0.012,u*0.01]); ctx.strokeStyle='rgba(255,255,255,.9)'; ctx.lineWidth=u*0.004;
+      ctx.beginPath(); q.forEach(([x,y],i)=>i?ctx.lineTo(x,y):ctx.moveTo(x,y)); ctx.closePath(); ctx.stroke(); ctx.setLineDash([]);
+      for(const [x,y] of q){ ctx.fillStyle='rgba(255,61,127,.95)'; ctx.beginPath(); ctx.arc(x,y,u*0.028,0,Math.PI*2); ctx.fill();
+        ctx.strokeStyle='#fff'; ctx.lineWidth=u*0.006; ctx.stroke(); }
+      ctx.restore();
+    }
+    signature(ctx,W,H,'rgba(255,255,255,.85)');
+  },
   clean(ctx,W,H){
     const p=ART.pal, u=Math.min(W,H);
     const bg = state.border==='white'?[246,245,241]: state.border==='black'?[12,12,14]:
@@ -614,6 +681,47 @@ const DRAW = {
   }
 };
 
+/* ---------- perspective for "My photo" ---------- */
+let BG=null, PREVIEW=false;
+const QUADS={};   // corners per size, stored as fractions of the canvas
+function getQuad(W,H){
+  const k=state.format;
+  if(!QUADS[k]){ const r=fit(ART.w,ART.h,W*0.5,H*0.5), x=(W-r.w)/2, y=H*0.42-r.h/2;
+    QUADS[k]=[[x,y],[x+r.w,y],[x+r.w,y+r.h],[x,y+r.h]].map(([a,b])=>[a/W,b/H]); }
+  return QUADS[k].map(([a,b])=>[a*W,b*H]);
+}
+/* unit square -> quad (TL,TR,BR,BL) projective map (Heckbert) */
+function sq2quad(p){
+  const [[x0,y0],[x1,y1],[x2,y2],[x3,y3]]=p;
+  const dx1=x1-x2, dx2=x3-x2, dy1=y1-y2, dy2=y3-y2, sx=x0-x1+x2-x3, sy=y0-y1+y2-y3;
+  let g=0,h=0;
+  if(Math.abs(sx)>1e-9||Math.abs(sy)>1e-9){ const det=dx1*dy2-dx2*dy1||1e-9; g=(sx*dy2-dx2*sy)/det; h=(dx1*sy-sx*dy1)/det; }
+  const a=x1-x0+g*x1, b=x3-x0+h*x3, c=x0, d=y1-y0+g*y1, e=y3-y0+h*y3, f=y0;
+  return (u,v)=>{ const w=g*u+h*v+1; return [(a*u+b*v+c)/w,(d*u+e*v+f)/w]; };
+}
+/* draw an image into a perspective quad using a grid of affine triangles */
+function warp(ctx,img,iw,ih,Hm,N){
+  const P=[]; for(let j=0;j<=N;j++){ P[j]=[]; for(let i=0;i<=N;i++) P[j][i]=Hm(i/N,j/N); }
+  const pad=0.8/S;  // grow each triangle slightly to hide hairline seams
+  for(let j=0;j<N;j++) for(let i=0;i<N;i++){
+    const s00=[i/N*iw,j/N*ih], s10=[(i+1)/N*iw,j/N*ih], s01=[i/N*iw,(j+1)/N*ih], s11=[(i+1)/N*iw,(j+1)/N*ih];
+    tri(ctx,img,s00,s10,s11,P[j][i],P[j][i+1],P[j+1][i+1],pad);
+    tri(ctx,img,s00,s11,s01,P[j][i],P[j+1][i+1],P[j+1][i],pad);
+  }
+}
+function tri(ctx,img,s0,s1,s2,d0,d1,d2,pad){
+  const den=s0[0]*(s1[1]-s2[1])+s1[0]*(s2[1]-s0[1])+s2[0]*(s0[1]-s1[1]); if(!den) return;
+  const solve=(a,b,c)=>[ (a*(s1[1]-s2[1])+b*(s2[1]-s0[1])+c*(s0[1]-s1[1]))/den,
+                         (a*(s2[0]-s1[0])+b*(s0[0]-s2[0])+c*(s1[0]-s0[0]))/den,
+                         (a*(s1[0]*s2[1]-s2[0]*s1[1])+b*(s2[0]*s0[1]-s0[0]*s2[1])+c*(s0[0]*s1[1]-s1[0]*s0[1]))/den ];
+  const [A,C,E]=solve(d0[0],d1[0],d2[0]), [B,D,F]=solve(d0[1],d1[1],d2[1]);
+  const cx=(d0[0]+d1[0]+d2[0])/3, cy=(d0[1]+d1[1]+d2[1])/3;
+  const g=p=>{const dx=p[0]-cx, dy=p[1]-cy, l=Math.hypot(dx,dy)||1; return [p[0]+dx/l*pad, p[1]+dy/l*pad];};
+  const [e0,e1,e2]=[g(d0),g(d1),g(d2)];
+  ctx.save(); ctx.beginPath(); ctx.moveTo(e0[0],e0[1]); ctx.lineTo(e1[0],e1[1]); ctx.lineTo(e2[0],e2[1]); ctx.closePath(); ctx.clip();
+  ctx.transform(A,B,C,D,E,F); ctx.drawImage(img,0,0); ctx.restore();
+}
+
 /* ---------- render ---------- */
 function render(canvas,scene,fmt,maxPx){
   const F=FORMATS[fmt], s=maxPx?Math.min(1,maxPx/Math.max(F.w,F.h)):1;
@@ -632,10 +740,11 @@ function refresh(){
   cancelAnimationFrame(raf);
   raf=requestAnimationFrame(()=>{
     document.querySelectorAll('.row[data-for]').forEach(r=>{ r.style.display = r.dataset.for.split(',').includes(state.scene)?'':'none'; });
-    const canDrag = DEVICES.includes(state.scene) && state.fillScreen;
+    const canDrag = (DEVICES.includes(state.scene) && state.fillScreen) || state.scene==='custom';
+    $('dragHint').textContent = state.scene==='custom' ? 'Drag the pink corners onto the spot in your photo where the art should go.' : 'Drag the picture to choose which part fills the screen.';
     $('dragHint').hidden = !(ART && canDrag); $('preview').style.touchAction = canDrag?'none':'auto';
     if(!ART) return;
-    render($('preview'),state.scene,state.format,1100);
+    PREVIEW=true; render($('preview'),state.scene,state.format,1100); PREVIEW=false;
     render($('c1'),'clean',state.format,360);
     render($('c2'),'detail',state.format,360);
     render($('c3'),state.scene==='clean'?'frame':state.scene,state.format,360);
@@ -688,12 +797,29 @@ $('focusCanvas').addEventListener('pointermove',e=>{ if(ART && e.buttons) setFoc
 /* drag the preview to choose which part of the art fills a device screen */
 const DEVICES=['phone','tablet','laptop','monitor'];
 let drag=null;
-$('preview').addEventListener('pointerdown',e=>{ if(!ART||!DEVICES.includes(state.scene)||!state.fillScreen) return;
+let corner=null;
+function logical(e){ const r=$('preview').getBoundingClientRect(), F=FORMATS[state.format];
+  return [(e.clientX-r.left)/r.width*F.w, (e.clientY-r.top)/r.height*F.h, r.width/F.w]; }
+$('preview').addEventListener('pointerdown',e=>{
+  if(ART && state.scene==='custom'){ const F=FORMATS[state.format], [x,y,k]=logical(e), q=getQuad(F.w,F.h);
+    let best=-1, bd=1e9; q.forEach(([a,b],i)=>{ const d=Math.hypot(a-x,b-y); if(d<bd){bd=d;best=i;} });
+    if(bd*k<60){ corner=best; $('preview').setPointerCapture(e.pointerId); } return; }
+  if(!ART||!DEVICES.includes(state.scene)||!state.fillScreen) return;
   drag={x:e.clientX,y:e.clientY,px:state.pan.x,py:state.pan.y}; $('preview').setPointerCapture(e.pointerId); });
-$('preview').addEventListener('pointermove',e=>{ if(!drag) return; const r=$('preview').getBoundingClientRect();
+$('preview').addEventListener('pointermove',e=>{
+  if(corner!==null){ const F=FORMATS[state.format], [x,y]=logical(e);
+    QUADS[state.format][corner]=[Math.max(0,Math.min(1,x/F.w)),Math.max(0,Math.min(1,y/F.h))]; refresh(); return; }
+  if(!drag) return; const r=$('preview').getBoundingClientRect();
   const cl=v=>Math.max(0,Math.min(1,v));
   state.pan={x:cl(drag.px-(e.clientX-drag.x)/r.width*1.6), y:cl(drag.py-(e.clientY-drag.y)/r.height*1.6)}; refresh(); });
-['pointerup','pointercancel'].forEach(t=>$('preview').addEventListener(t,()=>{drag=null;}));
+['pointerup','pointercancel'].forEach(t=>$('preview').addEventListener(t,()=>{drag=null;corner=null;}));
+$('pickBg').onclick=()=>$('bgFile').click();
+$('resetQuad').onclick=()=>{ delete QUADS[state.format]; refresh(); };
+$('blend').value=state.blend; $('blend').oninput=e=>{state.blend=+e.target.value;persist();refresh();};
+$('bgFile').onchange=async e=>{ const f=e.target.files[0]; if(!f) return; busy(true);
+  try{ const img=await loadImage(f); BG={img,w:img.naturalWidth,h:img.naturalHeight}; if(!ART) toast('Now pick your art too'); refresh(); }
+  catch(err){ toast('Could not open that photo'); }
+  busy(false); e.target.value=''; };
 $('pickBtn').onclick=$('pickBtn2').onclick=()=>$('file').click();
 $('file').onchange=async e=>{
   const f=e.target.files[0]; if(!f) return;
@@ -701,8 +827,8 @@ $('file').onchange=async e=>{
   try{
     const img=await loadImage(f);
     const w=img.naturalWidth||img.width, h=img.naturalHeight||img.height;
-    ART={img,w,h,small:shrink(img,w,h,48),tiny:shrink(img,w,h,10),glow:makeGlow(img,w,h),pal:analyse(img),name:f.name.replace(/\.[^.]+$/,'')};
-    state.focus={x:.5,y:.5}; state.pan={x:.5,y:.5};
+    ART={img,w,h,mid:shrink(img,w,h,1400),small:shrink(img,w,h,48),tiny:shrink(img,w,h,10),glow:makeGlow(img,w,h),pal:analyse(img),name:f.name.replace(/\.[^.]+$/,'')};
+    state.focus={x:.5,y:.5}; state.pan={x:.5,y:.5}; for(const k in QUADS) delete QUADS[k];
     $('empty').hidden=true; $('pickBtn2').hidden=false; $('saveOne').disabled=false; $('saveCarousel').disabled=false;
     refresh();
   }catch(err){ toast('Could not open that image'); console.error(err); }
@@ -750,6 +876,103 @@ $('saveCarousel').onclick=()=>exportSet([['clean','1-full'],['detail','2-detail'
 
 function busy(on){ $('busy').classList.toggle('show',on); }
 let tt; function toast(t){ const el=$('toast'); el.textContent=t; el.classList.add('show'); clearTimeout(tt); tt=setTimeout(()=>el.classList.remove('show'),2200); }
+
+/* ---------- captions & hashtags (offline, no AI service) ---------- */
+const TAGS = {
+  core:   ['#digitalart','#abstractart','#contemporaryart','#artoftheday','#newmediaart','#visualart','#artistsoninstagram','#digitalartist'],
+  glitch: ['#glitchart','#glitch','#glitchaesthetic','#databending','#pixelsorting','#glitchartist','#digitalglitch','#glitchy','#vaporwave','#experimentalart'],
+  colour: ['#colorful','#colourful','#chromatic','#colorstudy','#vibrantart','#neonart','#psychedelicart','#abstractdigitalart'],
+  mobile: ['#mobileart','#phoneart','#mobileartistry','#appart','#mobileediting','#madeonmobile'],
+  photo:  ['#photography','#abstractphotography','#experimentalphotography','#photoart','#fineartphotography','#creativephotography','#editedphoto'],
+  gen:    ['#generativeart','#creativecoding','#proceduralart','#algorithmicart','#computerart'],
+  prints: ['#artprints','#wallart','#artforsale','#printsforsale','#homedecor','#posterart']
+};
+const STYLE_SETS = {glitch:['glitch','colour','mobile'], abstract:['colour','core','mobile'], photo:['photo','mobile','colour'], generative:['gen','colour','core']};
+const OPENERS = {
+  glitch:['Signal lost, colour found.','Broken on purpose.','A little noise in the system.','Corrupted into something new.','Static, rearranged.'],
+  abstract:['Colour, doing its own thing.','No subject, just feeling.','Shapes I keep coming back to.','A study in colour and noise.'],
+  photo:['A real moment, pushed somewhere else.','Started as a photo, ended as this.','Light, bent a little.','From the camera roll into another world.'],
+  generative:['Rules in, chaos out.','Made by a process, picked by eye.','Somewhere between control and accident.']
+};
+const CTAS = {
+  save:   ['Save it for later if it hits.','Save this one for a rainy day.'],
+  fav:    ['Which slide is your favourite, 1, 2 or 3?','Full piece or close-up, which one wins?'],
+  prints: ['Prints coming soon. Comment "print" if you want one.','Would you hang this on your wall? Prints are on the way.'],
+  follow: ['Follow for new work every week.','More of this every week, follow along.'],
+  none:   ['']
+};
+function pick(a,r){ return a[Math.floor(r()*a.length)]; }
+function shuffle(a,r){ a=a.slice(); for(let i=a.length-1;i>0;i--){const j=Math.floor(r()*(i+1)); [a[i],a[j]]=[a[j],a[i]];} return a; }
+let capSeed = Date.now()%100000+1;
+function recentTags(){ try{ return JSON.parse(localStorage.getItem('nw-recent-tags')||'[]'); }catch(e){ return []; } }
+function buildTags(r){
+  const ig = state.capPlat==='ig';
+  if(!ig){ // X: one or two tags work best
+    const main = state.capStyle==='photo'?'#photography':state.capStyle==='generative'?'#generativeart':state.capStyle==='abstract'?'#abstractart':'#glitchart';
+    return [main,'#digitalart'];
+  }
+  const recent=new Set(recentTags()), sets=STYLE_SETS[state.capStyle], out=[];
+  const take=(list,n)=>{ const fresh=shuffle(list.filter(t=>!recent.has(t)&&!out.includes(t)),r), old=shuffle(list.filter(t=>recent.has(t)&&!out.includes(t)),r);
+    out.push(...fresh.concat(old).slice(0,n)); };
+  // Instagram allows only 5 hashtags per post (since Dec 2025), so pick 5 specific ones
+  take(TAGS[sets[0]],2); take(TAGS[sets[1]],1); take(TAGS[sets[2]],1);
+  take(state.capCta==='prints'?TAGS.prints:TAGS.core,1);
+  return out;   // 5 tags, a different mix each time
+}
+let CAP={text:'',tags:[]};
+function buildCaption(){
+  const r=rng(capSeed), ig=state.capPlat==='ig';
+  const title=(state.title||'').trim(), mood=(state.capMood||'').trim(), name=(state.sigText||'Nowhingness').trim();
+  const lines=[];
+  lines.push(title?`"${title}"`:pick(OPENERS[state.capStyle],r));
+  if(title) lines.push(pick(OPENERS[state.capStyle],r));
+  if(mood) lines.push(mood.charAt(0).toUpperCase()+mood.slice(1)+(/[.!?]$/.test(mood)?'':'.'));
+  if(state.capApp!=='none' && ig) lines.push(`Made on my phone with ${state.capApp}.`);
+  const cta=pick(CTAS[state.capCta],r); if(cta) lines.push(cta);
+  if(ig) lines.push(`— ${name}`);
+  const tags=buildTags(r);
+  let text;
+  if(!ig){ text=lines.join(' ')+' '+tags.join(' '); if(text.length>280) text=text.slice(0,277)+'…'; }
+  else if(state.capTagPlace==='comment') text=lines.join('\n');
+  else text=lines.join('\n')+'\n.\n.\n'+tags.join(' ');
+  CAP={text,tags};
+  $('capOut').value=text;
+  $('tagPlaceRow').style.display = ig?'':'none';
+  $('capCount').textContent = ig ? `${tags.length} hashtags. Instagram now allows 5 per post, so these are specific ones, shuffled each time` +
+     (state.capTagPlace==='comment'?'. Paste the hashtags as your first comment.':'') : `${text.length}/280 characters`;
+}
+function copyText(t,msg){
+  const done=()=>toast(msg);
+  if(navigator.clipboard && window.isSecureContext) navigator.clipboard.writeText(t).then(done,()=>fallbackCopy(t,msg));
+  else fallbackCopy(t,msg);
+}
+function fallbackCopy(t,msg){ const ta=document.createElement('textarea'); ta.value=t; ta.style.position='fixed'; ta.style.opacity='0'; document.body.appendChild(ta); ta.select();
+  try{ document.execCommand('copy'); toast(msg); }catch(e){ toast('Long-press the text to copy'); } ta.remove(); }
+function rememberTags(){ try{ const r=recentTags().concat(CAP.tags).slice(-40); localStorage.setItem('nw-recent-tags',JSON.stringify(r)); }catch(e){} }
+const capRefresh=()=>{ persist(); buildCaption(); };
+function capChips(el,items,key){ chips(el,items,key); el.querySelectorAll('.chip').forEach(b=>{ const o=b.onclick; b.onclick=()=>{o(); buildCaption();}; }); }
+capChips($('capPlatChips'),[['ig','Instagram'],['x','Twitter / X']],'capPlat');
+capChips($('capStyleChips'),[['glitch','Glitch'],['abstract','Abstract'],['photo','Photo'],['generative','Generative']],'capStyle');
+capChips($('capAppChips'),[['Glitchlab','Glitchlab'],['Chromalab','Chromalab'],['Onelab','Onelab'],['none','Don\'t say']],'capApp');
+capChips($('capCtaChips'),[['save','Save'],['fav','Pick a slide'],['prints','Prints'],['follow','Follow'],['none','Nothing']],'capCta');
+capChips($('capTagPlaceChips'),[['caption','Caption'],['comment','First comment']],'capTagPlace');
+$('capTitle').value=state.title; $('capTitle').oninput=e=>{ state.title=e.target.value; $('title').value=state.title; capRefresh(); refresh(); };
+$('title').addEventListener('input',()=>{ $('capTitle').value=state.title; buildCaption(); });
+$('sigText').addEventListener('input',buildCaption);
+$('capMood').value=state.capMood; $('capMood').oninput=e=>{ state.capMood=e.target.value; capRefresh(); };
+$('capNew').onclick=()=>{ capSeed=Math.floor(Math.random()*1e6)+1; buildCaption(); };
+$('capCopy').onclick=()=>{ copyText($('capOut').value,'Caption copied'); rememberTags(); };
+$('capCopyTags').onclick=()=>{ copyText(CAP.tags.join(' '),'Hashtags copied'); rememberTags(); };
+$('capPlan').innerHTML = [
+  '<b>Mon</b>: new piece as a carousel (full, detail, scene)',
+  '<b>Wed</b>: new piece in a device or room mockup',
+  '<b>Fri</b>: new piece as a carousel',
+  '<b>Sun</b>: an older piece from your backlog in a new scene',
+  'Stories on most days: work in progress, or a detail crop',
+  'Post at the same time each day (evening is a good start), then check your Insights after 2-3 weeks and move it if needed',
+  'Spend 10 minutes after posting replying to comments and commenting on other glitch/digital artists'
+].map(t=>'<li>'+t+'</li>').join('');
+buildCaption();
 
 refresh();
 if('serviceWorker' in navigator && location.protocol.startsWith('http')) navigator.serviceWorker.register('sw.js').catch(()=>{});

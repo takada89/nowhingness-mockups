@@ -11,6 +11,8 @@ A mockup maker that runs in your phone's browser. Pick a piece from your gallery
 - **Carousel set:** saves 3 slides in one go: the full piece on a clean border, a close-up detail (tap the small picture to choose where, and use the slider to zoom), and the scene you chose.
 - **Branding:** a "NOWHINGNESS" signature you can turn on or off, in three styles (CAPS, Script, mono) and three positions. Your choices are remembered.
 - **Colours come from your art.** The "Auto" wall, the phone background and the dark-room glow use colours taken from the piece.
+- **My photo:** pick a photo of your own wall, desk or screen, then drag the 4 pink corners to place your art in it with real perspective. It has an optional frame and a slider that lets the photo's light show on the art.
+- **Caption & hashtags:** builds an Instagram or X caption from your title, mood and the app you used, plus a call to action. It picks 5 specific hashtags (Instagram's limit since Dec 2025), shuffled so that recently used ones come last. It also has one-tap copy and a simple weekly posting plan. It works offline, with no AI service.
 
 ## Putting it on your Android phone
 
