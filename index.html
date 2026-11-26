@@ -82,6 +82,7 @@ textarea{width:100%;min-height:170px;background:var(--chip);border:0;border-radi
 .toast.show{opacity:1}
 .busy{position:fixed;inset:0;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,.5);z-index:15;font-weight:600}
 .busy.show{display:flex}
+.busy-box{display:flex;flex-direction:column;align-items:center;gap:12px;text-align:center;padding:0 24px}
 @media (min-width:900px){
   main{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(0,1fr);gap:8px;max-width:1300px;margin:0 auto}
   .controls,.stage{min-width:0}
@@ -211,7 +212,7 @@ textarea{width:100%;min-height:170px;background:var(--chip);border:0;border-radi
     <button class="btn primary" id="downloadBtn">Save to phone</button>
   </div>
 </div>
-<div class="busy" id="busy">Rendering…</div>
+<div class="busy" id="busy"><div class="busy-box"><span id="busyText">Rendering…</span><button id="busyCancel" class="btn" hidden>Cancel</button></div></div>
 <div class="toast" id="toast"></div>
 <input type="file" id="file" accept="image/*" hidden>
 <input type="file" id="bgFile" accept="image/*" hidden>
@@ -924,7 +925,7 @@ $('batchFile').onchange=async e=>{
   busy(true);
   try{
     for(let n=0;n<list.length;n++){
-      $('busy').textContent=`Rendering piece ${n+1} of ${list.length}…`; await new Promise(r=>setTimeout(r,20));
+      $('busyText').textContent=`Rendering piece ${n+1} of ${list.length}…`; await new Promise(r=>setTimeout(r,20));
       const img=await loadImage(list[n]); ART=makeArt(img,list[n].name);
       LOOK=inspect(img); LOOK.det=await detectObjects(img); state.capStyle=subjectOf(LOOK)==='art'?LOOK.style:'photo'; state.focus=autoFocus(img); state.pan={x:.5,y:.5};
       const idea=titleIdeas(LOOK,rng(Math.floor(Math.random()*1e6)+1))[0];
@@ -943,7 +944,7 @@ $('batchFile').onchange=async e=>{
   // put the piece you were working on back
   ART=saved.ART; LOOK=saved.LOOK; TITLE_SPACE=saved.TITLE_SPACE; state.title=saved.title; state.focus=saved.focus; state.pan=saved.pan; state.capStyle=saved.capStyle;
   $('capStyleChips').querySelectorAll('.chip').forEach(c=>c.setAttribute('aria-pressed',c.dataset.val===state.capStyle));
-  buildCaption(); busy(false); $('busy').textContent='Rendering…';
+  buildCaption(); busy(false); $('busyText').textContent='Rendering…';
   if(results.length) showBatch(results);
 };
 function showBatch(results){
@@ -975,7 +976,7 @@ function showBatch(results){
 $('saveCarousel').onclick=()=>exportSet([['clean','1-full'],['detail','2-detail'],[state.scene==='clean'?'frame':state.scene,'3-scene']]);
 
 function busy(on){ $('busy').classList.toggle('show',on); }
-let tt; function toast(t){ const el=$('toast'); el.textContent=t; el.classList.add('show'); clearTimeout(tt); tt=setTimeout(()=>el.classList.remove('show'),2200); }
+let tt; function toast(t,ms){ const el=$('toast'); el.textContent=t; el.classList.add('show'); clearTimeout(tt); tt=setTimeout(()=>el.classList.remove('show'),ms||2200); }
 
 /* ---------- reading the picture (colours + texture, all on the phone) ---------- */
 const HUES=[[15,'red'],[40,'orange'],[65,'yellow'],[150,'green'],[185,'teal'],[205,'cyan'],[250,'blue'],[280,'violet'],[320,'magenta'],[345,'pink'],[360,'red']];
@@ -1371,7 +1372,7 @@ $('title').addEventListener('input',()=>{ $('capTitle').value=state.title; build
 $('sigText').addEventListener('input',buildCaption);
 $('capMood').value=state.capMood; $('capMood').oninput=e=>{ state.capMood=e.target.value; capRefresh(); };
 /* ---------- AI titles with Google Gemini (optional, user's own free key, stored only on this device) ---------- */
-const GEMINI_MODELS=['gemini-flash-latest','gemini-2.5-flash','gemini-2.0-flash'];
+const GEMINI_MODELS=['gemini-2.5-flash','gemini-flash-latest','gemini-2.0-flash']; let GEMINI_WAIT=40000;
 function aiKey(){ try{ return localStorage.getItem('nw-gemini-key')||''; }catch(e){ return ''; } }
 function aiPrompt(){
   const app=state.capApp!=='none'?state.capApp:null, name=(state.sigText||'Nowhingness').trim();
@@ -1385,32 +1386,48 @@ Return JSON only, in this shape: {"titles":[{"title":"...","line":"..."}],"hasht
 async function aiTitles(){
   if(!ART){ toast('Pick a piece first'); return; }
   const key=aiKey(); if(!key){ $('aiKeyBox').hidden=false; $('aiKey').focus(); return; }
-  const look=LOOK; busy(true); $('busy').textContent='Asking Gemini…';
+  const look=LOOK, t0=Date.now(); let cancelled=false, ctrl=null, timedOut=false;
+  const label=()=>$('busyText').textContent=`Asking Gemini… ${Math.round((Date.now()-t0)/1000)}s`;
+  busy(true); label(); const tick=setInterval(label,1000);
+  $('busyCancel').hidden=false; $('busyCancel').onclick=()=>{ cancelled=true; if(ctrl) ctrl.abort(); };
   try{
-    const c=shrink(ART.img,ART.w,ART.h,768), b64=c.toDataURL('image/jpeg',0.85).split(',')[1];
-    const body={contents:[{parts:[{text:aiPrompt()},{inline_data:{mime_type:'image/jpeg',data:b64}}]}],
-                generationConfig:{responseMimeType:'application/json',temperature:1.0}};
+    const c=shrink(ART.img,ART.w,ART.h,640), b64=c.toDataURL('image/jpeg',0.82).split(',')[1];
     let res, lastErr='';
     for(const m of GEMINI_MODELS){
-      const r=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${m}:generateContent`,{method:'POST',
-        headers:{'Content-Type':'application/json','x-goog-api-key':key},body:JSON.stringify(body)});
-      if(r.ok){ res=await r.json(); break; }
-      const err=await r.json().catch(()=>({})); lastErr=(err.error&&err.error.message)||('HTTP '+r.status);
-      if(r.status===400||r.status===401||r.status===403||r.status===429) break;   // bad key or limit: other models won't help
+      if(cancelled) break;
+      const gen={responseMimeType:'application/json',temperature:1.0};
+      if(m==='gemini-2.5-flash') gen.thinkingConfig={thinkingBudget:0};          // no slow "thinking" step
+      const body={contents:[{parts:[{text:aiPrompt()},{inline_data:{mime_type:'image/jpeg',data:b64}}]}],generationConfig:gen};
+      ctrl=new AbortController(); timedOut=false;
+      const timer=setTimeout(()=>{ timedOut=true; ctrl.abort(); },GEMINI_WAIT);
+      try{
+        const r=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${m}:generateContent`,{method:'POST',
+          headers:{'Content-Type':'application/json','x-goog-api-key':key},body:JSON.stringify(body),signal:ctrl.signal});
+        if(r.ok){ res=await r.json(); break; }
+        const err=await r.json().catch(()=>({})); lastErr=(err.error&&err.error.message)||('HTTP '+r.status);
+        if(r.status===401||r.status===403||r.status===429||/API key|API_KEY/i.test(lastErr)) break;   // bad key or limit: other models won't help
+      }catch(e){
+        if(cancelled) break;
+        lastErr=timedOut?'no answer after '+GEMINI_WAIT/1000+' seconds':(e.message||'network error');
+      }finally{ clearTimeout(timer); }
     }
+    if(cancelled){ toast('Cancelled'); return; }
     if(!res) throw new Error(lastErr||'No answer');
     const txt=res.candidates?.[0]?.content?.parts?.map(p=>p.text||'').join('')||'';
+    if(!txt) throw new Error(res.promptFeedback?.blockReason?'it refused this image ('+res.promptFeedback.blockReason+')':'empty answer');
     const data=JSON.parse(txt.replace(/^```(json)?|```$/g,'').trim());
     const titles=(data.titles||[]).filter(o=>o&&o.title).slice(0,6).map(o=>({title:String(o.title).trim(),line:String(o.line||'').trim()}));
     const hashtags=(data.hashtags||[]).map(h=>'#'+String(h).replace(/^#/,'').toLowerCase().replace(/[^a-z0-9_]/g,'')).filter(h=>h.length>2).slice(0,3);
-    if(!titles.length) throw new Error('Empty answer');
+    if(!titles.length) throw new Error('empty answer');
     if(LOOK===look){ look.ai={titles,hashtags}; showTitleIdeas(); buildCaption(); toast('AI titles ready'); }
   }catch(e){
     console.warn(e); const m=String(e.message||e);
-    toast(/API key|API_KEY|permission|401|403/i.test(m)?'Gemini did not accept the key. Check it and paste again.':/quota|429|exhausted/i.test(m)?'Gemini free limit reached. Try again later.':'Gemini did not answer: '+m.slice(0,80));
+    toast(/API key|API_KEY|permission|401|403/i.test(m)?'Gemini did not accept the key. Check it and paste again.':/quota|429|exhausted/i.test(m)?'Gemini free limit reached. Try again later.':/JSON/i.test(m)?'Gemini answered in a strange format. Tap ✦ AI titles again.':'Gemini did not answer: '+m.slice(0,90),6000);
     if(/API key|API_KEY|401|403/i.test(m)) $('aiKeyBox').hidden=false;
+  }finally{
+    clearInterval(tick); $('busyCancel').hidden=true; $('busyCancel').onclick=null;
+    busy(false); $('busyText').textContent='Rendering…';
   }
-  busy(false); $('busy').textContent='Rendering…';
 }
 $('aiTitles').onclick=aiTitles;
 $('aiKeySave').onclick=()=>{ const k=$('aiKey').value.trim(); if(!k){ toast('Paste the key first'); return; }
