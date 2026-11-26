@@ -163,7 +163,7 @@ textarea{width:100%;min-height:170px;background:var(--chip);border:0;border-radi
       <div class="row"><label>Subject</label><div class="chips" id="subjectChips"></div></div>
       <div class="row"><label>Title</label><input type="text" id="capTitle" placeholder="Untitled" maxlength="60"></div>
       <div id="titleSugWrap" hidden><div class="chips" id="titleSug" style="margin:6px 0;flex-wrap:wrap;padding:0"></div>
-        <div class="btnrow" style="margin-top:0"><button class="chip" id="aiTitles" aria-pressed="true">✦ AI titles (Gemini)</button><button class="chip" id="titleMore">More title ideas</button><button class="chip" id="gptPrompt">Copy prompt for ChatGPT</button></div>
+        <div class="btnrow" style="margin-top:0"><button class="chip" id="aiTitles" aria-pressed="true">✦ AI titles (Gemini)</button><button class="chip" id="titleMore">More title ideas</button><button class="chip" id="gptPrompt">Copy prompt for ChatGPT</button><button class="chip" id="aiKeyToggle">🔑 Change Gemini key</button></div>
         <div id="aiKeyBox" hidden style="background:#15151a;border-radius:10px;padding:10px 12px;margin-bottom:8px">
           <div class="hint" style="margin-top:0">AI titles use Google's Gemini, which is free with daily limits. Get a key at <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener" style="color:var(--accent2)">aistudio.google.com/apikey</a> (sign in with Google, then tap "Create API key"), and paste it here. It's saved only on this device. When you use it, the picture is sent to Google, and on the free tier Google may use it to improve its products.</div>
           <div class="row"><input type="text" id="aiKey" placeholder="Paste your Gemini API key" autocomplete="off" style="width:100%"></div>
@@ -1433,6 +1433,7 @@ $('aiTitles').onclick=aiTitles;
 $('aiKeySave').onclick=()=>{ const k=$('aiKey').value.trim(); if(!k){ toast('Paste the key first'); return; }
   try{ localStorage.setItem('nw-gemini-key',k); }catch(e){ toast('Could not save the key on this device'); return; }
   $('aiKey').value=''; $('aiKeyBox').hidden=true; aiTitles(); };
+$('aiKeyToggle').onclick=()=>{ const box=$('aiKeyBox'); box.hidden=!box.hidden; if(!box.hidden) $('aiKey').focus(); };
 $('aiKeyForget').onclick=()=>{ try{ localStorage.removeItem('nw-gemini-key'); }catch(e){} toast('Key removed from this device'); };
 $('gptPrompt').onclick=()=>{
   const app=state.capApp!=='none'?state.capApp:null, name=(state.sigText||'Nowhingness').trim();
