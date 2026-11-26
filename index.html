@@ -162,7 +162,7 @@ textarea{width:100%;min-height:170px;background:var(--chip);border:0;border-radi
       <div class="row"><label>Subject</label><div class="chips" id="subjectChips"></div></div>
       <div class="row"><label>Title</label><input type="text" id="capTitle" placeholder="Untitled" maxlength="60"></div>
       <div id="titleSugWrap" hidden><div class="chips" id="titleSug" style="margin:6px 0;flex-wrap:wrap;padding:0"></div>
-        <button class="chip" id="titleMore" style="margin-bottom:8px">More title ideas</button></div>
+        <div class="btnrow" style="margin-top:0"><button class="chip" id="titleMore">More title ideas</button><button class="chip" id="gptPrompt">Copy prompt for ChatGPT</button></div></div>
       <div class="row"><label>Style</label><div class="chips" id="capStyleChips"></div></div>
       <div class="row"><label>Made with</label><div class="chips" id="capAppChips"></div></div>
       <div class="row"><label>Mood (optional)</label><input type="text" id="capMood" placeholder="e.g. late night signal noise" maxlength="80"></div>
@@ -1010,17 +1010,43 @@ function inspect(img){
     bandsH: dv>dh*1.6 && dv>0.04, bandsV: dh>dv*1.6 && dh>0.04, busy:(dh+dv)/2>0.05, minimal:(dh+dv)/2<0.006,
     symmetric: sym<0.12*contrast && (dh+dv)/2>0.005, warm:warm>cool*1.8, cool:cool>warm*1.8};
   t.tunnel = centre < outer*0.55 && outer>0.25;
-  t.pattern = t.busy || (t.many && (dh+dv)/2>0.02);
+  // shapes: which way the lines run, block by block (structure tensor)
+  const sf=shapeFeatures(L,w,h,d);
+  t.shape=sf;
+  t.hueRank=Object.entries(cnt).filter(([k,v])=>!['black','white','grey'].includes(k)&&v/N>0.05).sort((a,b)=>b[1]-a[1]).map(([k])=>k);
+  const detail=(dh+dv)/2;
+  t.flow   = sf.coh>0.6 && sf.R>0.15 && sf.R<0.85 && sf.lined>0.6 && !t.minimal;           // ribbons, waves, folds
+  t.swirl  = sf.coh>0.6 && sf.R<=0.15 && sf.lined>0.6 && !t.minimal;                         // lines turning every way: swirls, rings
+  t.pattern= sf.coh<0.5 && (t.busy || (t.many && detail>0.02));                               // dots, rosettes, blobs
+  t.glossy = sf.gloss>0.006 && sf.coh>0.6 && !t.mono;                                        // wet-looking highlights on lines
+  if(t.flow||t.swirl){ t.bandsH=false; t.bandsV=false; }   // waves are not glitch bands
   t._dbg={dh,dv,sym,meanS,colourfulness,contrast,symr:sym/contrast,centre,outer};
-  t.style = t.bandsH||t.bandsV ? 'glitch' : t.symmetric ? 'generative' : (t.mono&&!t.busy)||(!t.vivid&&!t.minimal&&!t.many) ? 'photo' : 'abstract';
+  t.style = t.flow||t.swirl||t.pattern||t.tunnel ? 'abstract' : t.bandsH||t.bandsV ? 'glitch' : t.symmetric ? 'generative' : (t.mono&&!t.busy)||(!t.vivid&&!t.minimal&&!t.many) ? 'photo' : 'abstract';
   return t;
 }
+function shapeFeatures(L,w,h,d){
+  let gloss=0; for(let i=0;i<d.length;i+=4){ const mx=Math.max(d[i],d[i+1],d[i+2]), mn=Math.min(d[i],d[i+1],d[i+2]); if(mx>230 && (mx-mn)/mx<0.25) gloss++; }
+  const B=12, bw=Math.floor(w/B), bh=Math.floor(h/B), blocks=[];
+  for(let by=0;by<B;by++) for(let bx=0;bx<B;bx++){ let xx=0,xy=0,yy=0;
+    for(let y=Math.max(1,by*bh);y<Math.min(h-1,(by+1)*bh);y++) for(let x=Math.max(1,bx*bw);x<Math.min(w-1,(bx+1)*bw);x++){ const k=y*w+x;
+      const gx=(L[k-w+1]+2*L[k+1]+L[k+w+1])-(L[k-w-1]+2*L[k-1]+L[k+w-1]), gy=(L[k+w-1]+2*L[k+w]+L[k+w+1])-(L[k-w-1]+2*L[k-w]+L[k-w+1]);
+      xx+=gx*gx; xy+=gx*gy; yy+=gy*gy; }
+    const tr=xx+yy; blocks.push({e:tr, coh: tr>1e-6?Math.sqrt((xx-yy)**2+4*xy*xy)/tr:0, th:0.5*Math.atan2(2*xy,xx-yy)}); }
+  const E=blocks.reduce((a,b)=>a+b.e,0)||1, EC=blocks.reduce((a,b)=>a+b.e*b.coh,0)||1;
+  let cx=0,cy=0; blocks.forEach(b=>{cx+=b.e*b.coh*Math.cos(2*b.th); cy+=b.e*b.coh*Math.sin(2*b.th);});
+  return {coh:EC/E, R:Math.hypot(cx,cy)/EC, lined:blocks.filter(b=>b.coh>0.45).length/blocks.length, gloss:gloss/(w*h)};
+}
+const colourList=t=>{ const h=(t.hueRank&&t.hueRank.length?t.hueRank:t.hues).slice(0,3);
+  if(t.mono) return 'black and white'; if(!h.length) return 'soft tones';
+  return h.length===1?h[0]:h.slice(0,-1).join(', ')+' and '+h[h.length-1]; };
 function describe(t){
   const bits=[];
   if(t.mono) bits.push('black & white'); else if(t.many) bits.push('many colours'); else if(t.hues.length) bits.push(t.hues.slice(0,2).join(' & '));
+  if(t.flow) bits.push(t.glossy?'flowing glossy ribbons/waves':'flowing ribbons/waves'); if(t.swirl) bits.push('swirling lines');
+  if(t.pattern) bits.push('dense rosette/dot pattern'); if(t.tunnel) bits.push('dark tunnel in the middle');
   if(t.bandsH) bits.push('horizontal glitch bands'); else if(t.bandsV) bits.push('vertical streaks');
   if(t.symmetric) bits.push('mirrored'); if(t.dark) bits.push('dark'); if(t.bright) bits.push('bright'); if(t.pastel) bits.push('pastel');
-  if(t.vivid&&!t.mono) bits.push('vivid'); if(t.highContrast) bits.push('high contrast'); if(t.busy) bits.push('busy'); if(t.minimal) bits.push('minimal');
+  if(t.vivid&&!t.mono) bits.push('vivid'); if(t.minimal) bits.push('minimal');
   return bits.join(', ');
 }
 const CWORDS={red:['Red','Crimson','Scarlet'],orange:['Amber','Orange','Tangerine'],yellow:['Yellow','Gold','Citrine'],green:['Green','Acid','Jade'],
@@ -1028,6 +1054,8 @@ const CWORDS={red:['Red','Crimson','Scarlet'],orange:['Amber','Orange','Tangerin
   magenta:['Magenta','Fuchsia','Neon'],pink:['Pink','Rose','Bubblegum'],black:['Black','Ink','Obsidian'],white:['White','Paper','Bone'],grey:['Grey','Ash','Concrete']};
 /* artistic titles: a motif + a place, e.g. "Rosette Passage", "Cathedral of Static", "The Saffron Reliquary" */
 const MOTIFS={ // [singular, plural]
+  flow:[['Ribbon','Ribbons'],['Current','Currents'],['Wave','Waves'],['Fold','Folds'],['Swell','Swells'],['Strand','Strands'],['Contour','Contours'],['Silk','Silks']],
+  swirl:[['Swirl','Swirls'],['Whorl','Whorls'],['Eddy','Eddies'],['Spiral','Spirals'],['Ring','Rings']],
   pattern:[['Rosette','Rosettes'],['Mosaic','Mosaics'],['Tessera','Tesserae'],['Medallion','Medallions'],['Kaleidoscope','Kaleidoscopes'],['Filigree','Filigrees'],['Ornament','Ornaments'],['Petal','Petals']],
   glitch:[['Signal','Signals'],['Static','Static'],['Scanline','Scanlines'],['Ghost','Ghosts'],['Glyph','Glyphs'],['Echo','Echoes']],
   symmetric:[['Mandala','Mandalas'],['Halo','Halos'],['Iris','Irises'],['Mirror','Mirrors'],['Medallion','Medallions']],
@@ -1038,6 +1066,8 @@ const MOTIFS={ // [singular, plural]
   base:[['Prism','Prisms'],['Bloom','Blooms'],['Orbit','Orbits'],['Ripple','Ripples'],['Aurora','Auroras']]
 };
 const PLACES={
+  flow:['Tide','River','Delta','Dunes','Strata','Shoreline','Undertow','Drift','Current'],
+  swirl:['Whirlpool','Maelstrom','Pool','Vortex'],
   tunnel:['Passage','Corridor','Tunnel','Descent','Well','Threshold'],
   pattern:['Garden','Atrium','Cathedral','Cloister','Orchard','Labyrinth'],
   glitch:['Frequency','Channel','Broadcast','Archive','Transmission'],
@@ -1053,23 +1083,25 @@ const CADJ={red:['Vermilion','Crimson','Garnet'],orange:['Saffron','Ochre','Ambe
 const SONGS=['Hymn','Elegy','Lullaby','Nocturne','Litany','Requiem','Reverie','Vespers'];
 const SONG_ADJ=['Broken','Distant','Sleeping','Burning','Hidden','Endless','Folded'];
 const VERBS=['Bloom','Gather','Turn','Dissolve','Sleep','Burn'];
+const FLOW_VERBS=['Turn','Fold','Run','Rise','Drift','Pour'];
+const GLOSS=['Molten','Liquid','Lacquered','Glazed','Oil-Slick','Chrome'];
 function traitKeys(t){ const k=[];
-  if(t.tunnel)k.push('tunnel'); if(t.pattern)k.push('pattern'); if(t.bandsH||t.bandsV)k.push('glitch'); if(t.symmetric)k.push('symmetric');
+  if(t.tunnel)k.push('tunnel'); if(t.flow)k.push('flow'); if(t.swirl)k.push('swirl'); if(t.pattern)k.push('pattern'); if(t.bandsH||t.bandsV)k.push('glitch'); if(t.symmetric)k.push('symmetric');
   if(t.dark)k.push('dark'); if(t.bright)k.push('bright'); if(t.minimal)k.push('minimal'); k.push('base'); return k; }
 function titleIdeas(t,r){
   const subj=subjectOf(t); if(subj!=='art') return photoTitles(t,subj,r);
-  const keys=traitKeys(t), top=keys.slice(0,2);  // strongest traits weigh most
-  const fromBank=(bank)=>{ const ks = r()<0.75 ? top : keys; const pool=ks.flatMap(k=>bank[k]||[]); return pick(pool.length?pool:bank.base,r); };
+  const keys=traitKeys(t), top=keys.slice(0,1);  // the main shape decides most words
+  const fromBank=(bank)=>{ const ks = r()<0.8 ? top : keys.slice(0,3); const pool=ks.flatMap(k=>bank[k]||[]); return pick(pool.length?pool:bank.base,r); };
   const M=()=>fromBank(MOTIFS), P=()=>fromBank(PLACES);
   const cols = t.mono?CADJ.mono : t.many?CADJ.many.concat(...t.hues.slice(0,2).map(h=>CADJ[h]||[])) : t.hues.slice(0,2).flatMap(h=>CADJ[h]||[]);
-  const C=()=>pick(cols.length?cols:CADJ.many,r);
+  const C0=()=>pick(cols.length?cols:CADJ.many,r), C=()=> t.glossy&&r()<0.4 ? pick(GLOSS,r) : C0();
   const forms=[
     ()=>{const p=P(); return {t:`${M()[0]} ${p}`, space:p};},                                      // Rosette Passage
     ()=>{const p=P(); return {t:`${p} of ${M()[1]}`, space:p};},                                   // Cathedral of Halos
     ()=>{const p=P(); return {t:`The ${C()} ${p}`, space:p};},                                     // The Saffron Reliquary
     ()=>{const m=M()[0]; return {t:`${C()} ${m}`, space:null};},                                   // Cobalt Rosette
     ()=>{const s2=pick(SONGS,r), adj=pick(SONG_ADJ,r); return {t:`${s2} for ${/^[AEIOU]/.test(adj)?'an':'a'} ${adj} ${M()[0]}`, space:s2};}, // Hymn for a Broken Signal
-    ()=>{const m=M()[1]; return {t:`Where the ${m} ${pick(VERBS,r)}`, space:null};}               // Where the Petals Dissolve
+    ()=>{const m=M()[1]; return {t:`Where the ${m} ${pick(t.flow||t.swirl?FLOW_VERBS:VERBS,r)}`, space:null};}  // Where the Ribbons Turn
   ];
   const order=[0,1,2,0,3,1,4,5,2,0,1,3];
   const out=[], seen=new Set(); let guard=0, k=0;
@@ -1078,11 +1110,27 @@ function titleIdeas(t,r){
   return out;
 }
 const INGREDIENTS=t=>{ const a=[];
+  if(t.flow||t.swirl)a.push('motion','color'); if(t.glossy)a.push('shine');
   if(t.pattern)a.push('pattern','repetition'); if(t.bandsH||t.bandsV)a.push('static','signal','noise'); if(t.tunnel)a.push('depth','shadow');
   if(t.symmetric)a.push('symmetry','reflection'); if(t.many||t.vivid)a.push('color','light'); if(t.dark)a.push('shadow','silence');
   if(t.bright)a.push('light'); if(t.minimal)a.push('space','silence'); a.push('color','noise'); return [...new Set(a)]; };
+/* a sentence about what is actually in the picture */
+function seeLine(t,r){
+  const cl=colourList(t), gl=t.glossy?pick([' with a wet, glossy shine',', glossy as lacquer',', shining like oil'],r):'';
+  if(t.flow) return pick([`Ribbons of ${cl}${gl}, folding over each other.`,`Waves of ${cl}${gl}, all moving the same way.`,
+                          `Folds of ${cl}${gl}, rolling like a slow tide.`,`${cap(cl)} poured into ribbons${gl}.`],r);
+  if(t.swirl) return pick([`${cap(cl)} turning around itself.`,`Rings and swirls of ${cl}.`],r);
+  if(t.tunnel) return pick([`A tunnel of ${cl}, pulling everything toward the dark middle.`,`${cap(cl)} closing in around a dark centre.`],r);
+  if(t.pattern) return pick([`Rosettes and rings of ${cl}, packed edge to edge.`,`A dense pattern of ${cl}, repeating until it hums.`],r);
+  if(t.bandsH||t.bandsV) return pick([`Bands of ${cl}, broken and shifted.`,`${cap(cl)}, sliced into scanlines.`],r);
+  if(t.symmetric) return pick([`Mirrored shapes in ${cl}.`,`${cap(cl)}, folded into a mirror.`],r);
+  if(t.minimal) return pick([`Soft ${cl}, with room to breathe.`,`Quiet ${cl}, and a lot of space.`],r);
+  return pick([`${cap(cl)}, layered and loud.`,`${cap(cl)}, all at once.`],r);
+}
+const cap=x=>x.charAt(0).toUpperCase()+x.slice(1);
 function describeLine(space,t,r){
   const ing=shuffle(INGREDIENTS(t),r), a=ing[0], b=ing[1]||'noise', c=ing[2]||'light', sp=space.toLowerCase();
+  if(['dunes','strata','waves','folds'].includes(sp)) return pick([`${cap(sp)} built from ${a}, ${b}, and ${c}.`,`${cap(sp)} of ${a} and ${b}.`],r);
   const art=/^[aeiou]/.test(sp)?'An':'A';
   return pick([`${art} ${sp} built from ${a}, ${b}, and ${c}.`,`${art} ${sp} made of ${a} and ${b}.`,
     `Somewhere between ${a} and ${b}, ${art.toLowerCase()} ${sp}.`,`Step into ${art.toLowerCase()} ${sp} of ${a}.`],r);
@@ -1095,8 +1143,10 @@ function pictureTags(t){
   else t.hues.slice(0,2).forEach(c=>colour.push(...(PIC_TAGS[c]||[])));
   if(t.pastel) colour.push('#pastelart'); if(t.vivid&&!t.mono) colour.push('#neonart','#vibrantart'); if(t.dark) colour.push('#darkart','#darkaesthetic');
   if(t.bandsH||t.bandsV) texture.push('#pixelsorting','#databending','#scanlines');
+  if(t.flow) texture.push('#flowart','#wavyart','#fluidart'); if(t.swirl) texture.push('#swirlart','#psychedelicart');
+  if(t.pattern) texture.push('#patternart','#kaleidoscope'); if(t.tunnel) texture.push('#psychedelicart','#surrealart');
   if(t.symmetric) texture.push('#symmetry','#kaleidoscope');
-  if(t.busy) texture.push('#maximalism','#chaosart'); if(t.minimal) texture.push('#minimalart','#minimalism');
+  if(!texture.length && t.busy) texture.push('#maximalism','#chaosart'); if(t.minimal) texture.push('#minimalart','#minimalism');
   if(t.highContrast&&!texture.length) texture.push('#highcontrast');
   return {colour,texture};
 }
@@ -1269,7 +1319,8 @@ function buildCaption(){
   let opener;
   const subj=subjectOf(LOOK);
   if(LOOK && subj!=='art') opener=pick(PHOTO_LINES[subj](LOOK),r);
-  else if(LOOK && (space || r()<0.5)) opener = describeLine(space || pick(['place','room','world','space'],r), LOOK, r);
+  else if(LOOK && space && r()<0.3) opener = describeLine(space, LOOK, r);
+  else if(LOOK) opener = seeLine(LOOK, r);
   else opener = tl.length && r()<0.6 ? pick(tl,r) : pick(OPENERS[state.capStyle],r);
   if(title) lines.push(title);
   const body=[opener];
@@ -1309,6 +1360,16 @@ $('capTitle').value=state.title; $('capTitle').oninput=e=>{ state.title=e.target
 $('title').addEventListener('input',()=>{ $('capTitle').value=state.title; buildCaption(); });
 $('sigText').addEventListener('input',buildCaption);
 $('capMood').value=state.capMood; $('capMood').oninput=e=>{ state.capMood=e.target.value; capRefresh(); };
+$('gptPrompt').onclick=()=>{
+  const app=state.capApp!=='none'?state.capApp:null, name=(state.sigText||'Nowhingness').trim();
+  const seen=LOOK?describe(LOOK):'';
+  const txt=`Look at the artwork I'm attaching. It's by ${name}, digital art made on a phone${app?' with '+app:''}.
+1. Suggest 6 short, evocative titles (2-4 words, in the spirit of "Rosette Passage") that describe what is actually visible: the shapes, motion, texture and colours. No generic words.
+2. Write a one-line caption in this style: "A corridor built from color, pattern, and noise."
+3. Give exactly 5 Instagram hashtags: #${name.toLowerCase().replace(/[^a-z0-9_]/g,'')}${app?' #'+app.toLowerCase():''} plus ${app?3:4} specific to this image.
+No emojis.${seen?`\n(My app's quick read: ${seen}.)`:''}`;
+  copyText(txt,'Prompt copied. Paste it into ChatGPT with your image');
+};
 $('titleMore').onclick=()=>{ titleSeed=Math.floor(Math.random()*1e6)+1; showTitleIdeas(); };
 $('capNew').onclick=()=>{ capSeed=Math.floor(Math.random()*1e6)+1; buildCaption(); };
 $('capCopy').onclick=()=>{ copyText($('capOut').value,'Caption copied'); rememberTags(); };
