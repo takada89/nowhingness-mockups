@@ -1,0 +1,641 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Nowhingness Mockups</title>
+<meta name="theme-color" content="#111114">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Mockups">
+<style>
+:root{
+  --bg:#111114; --panel:#1b1b20; --chip:#26262d; --chip-on:#f2f2f2; --text:#ececf0;
+  --muted:#9a9aa6; --accent:#ff3d7f; --accent2:#2de1ff; --line:#2e2e36;
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;background:var(--bg);color:var(--text);
+  font:15px/1.4 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+body{padding:env(safe-area-inset-top) 0 calc(96px + env(safe-area-inset-bottom))}
+header{display:flex;align-items:center;justify-content:space-between;padding:12px 16px 8px}
+header h1{font-size:14px;letter-spacing:.24em;margin:0;font-weight:700}
+header h1 span{background:linear-gradient(90deg,var(--accent),var(--accent2));-webkit-background-clip:text;background-clip:text;color:transparent}
+.ghost{white-space:nowrap;flex:0 0 auto;background:none;border:1px solid var(--line);color:var(--text);border-radius:999px;padding:7px 14px;font:inherit;font-size:13px}
+.stage{padding:0 16px}
+.preview-wrap{position:relative;background:#0a0a0c;border-radius:14px;overflow:hidden;display:flex;align-items:center;justify-content:center;min-height:200px}
+#preview{display:block;max-width:100%;max-height:62vh;width:auto;height:auto}
+.empty{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;text-align:center;padding:24px;color:var(--muted)}
+.empty button{font-size:16px}
+.empty[hidden],[hidden]{display:none!important}
+section{padding:14px 16px 0}
+h2{font-size:11px;letter-spacing:.18em;text-transform:uppercase;color:var(--muted);margin:0 0 8px;font-weight:600}
+.chips{display:flex;gap:8px;overflow-x:auto;scrollbar-width:none;padding-bottom:2px;margin:0 -16px;padding-left:16px;padding-right:16px}
+.chips::-webkit-scrollbar{display:none}
+.chip{flex:0 0 auto;background:var(--chip);color:var(--text);border:0;border-radius:999px;padding:9px 14px;font:inherit;font-size:14px;white-space:nowrap}
+.chip[aria-pressed="true"]{background:var(--chip-on);color:#111}
+.row{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:12px;padding:8px 0;border-bottom:1px solid var(--line)}
+.row:last-child{border-bottom:0}
+.row label{color:var(--text)}
+.row .chips{margin:0;padding:0;justify-content:flex-end;flex-wrap:wrap}
+.panel{background:var(--panel);border-radius:14px;padding:4px 14px}
+input[type=text]{background:var(--chip);border:0;border-radius:10px;color:var(--text);font:inherit;padding:9px 12px;width:60%}
+input[type=range]{width:55%;accent-color:var(--accent)}
+.switch{position:relative;width:46px;height:28px;flex:0 0 auto}
+.switch input{opacity:0;width:0;height:0}
+.switch span{position:absolute;inset:0;background:var(--chip);border-radius:999px;transition:.2s}
+.switch span:before{content:"";position:absolute;width:22px;height:22px;left:3px;top:3px;background:#fff;border-radius:50%;transition:.2s}
+.switch input:checked+span{background:var(--accent)}
+.switch input:checked+span:before{transform:translateX(18px)}
+.carousel-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:6px}
+.carousel-grid canvas{width:100%;height:auto;border-radius:8px;background:#000;display:block}
+.carousel-grid small{display:block;text-align:center;color:var(--muted);font-size:11px;margin-top:4px}
+.focus-box{position:relative;margin:10px 0 6px;display:flex;justify-content:center}
+#focusCanvas{max-width:100%;max-height:200px;border-radius:8px;touch-action:none;cursor:crosshair}
+.hint{color:var(--muted);font-size:12.5px;margin:6px 0 10px}
+.bar{position:fixed;left:0;right:0;bottom:0;display:flex;gap:10px;padding:12px 16px calc(12px + env(safe-area-inset-bottom));
+  background:linear-gradient(transparent,rgba(17,17,20,.92) 30%);z-index:5}
+.btn{flex:1;border:0;border-radius:14px;padding:15px 10px;font:inherit;font-weight:700;font-size:15px}
+.btn.primary{background:linear-gradient(90deg,var(--accent),#ff7a45);color:#fff}
+.btn.secondary{background:#2a2a32;color:var(--text)}
+.btn:disabled{opacity:.4}
+.overlay{position:fixed;inset:0;background:#000;z-index:10;display:none;flex-direction:column;
+  padding:calc(12px + env(safe-area-inset-top)) 16px calc(16px + env(safe-area-inset-bottom))}
+.overlay.open{display:flex}
+.overlay .imgs{flex:1;overflow-y:auto;display:flex;flex-direction:column;gap:12px;align-items:center;padding:8px 0}
+.overlay img{max-width:100%;max-height:70vh;border-radius:6px;-webkit-touch-callout:default}
+.overlay .actions{display:flex;gap:10px}
+.overlay p{color:var(--muted);font-size:13px;text-align:center;margin:8px 0}
+.toast{position:fixed;left:50%;bottom:100px;transform:translateX(-50%);background:#fff;color:#111;padding:10px 16px;border-radius:999px;font-size:14px;z-index:20;opacity:0;transition:.25s;pointer-events:none}
+.toast.show{opacity:1}
+.busy{position:fixed;inset:0;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,.5);z-index:15;font-weight:600}
+.busy.show{display:flex}
+@media (min-width:900px){
+  main{display:grid;grid-template-columns:1.2fr 1fr;gap:8px;max-width:1200px;margin:0 auto}
+  #preview{max-height:80vh}
+  .stage{position:sticky;top:8px;align-self:start}
+}
+</style>
+</head>
+<body>
+<header>
+  <h1><span>NOWHINGNESS</span> MOCKUPS</h1>
+  <button class="ghost" id="pickBtn2" hidden>Change art</button>
+</header>
+<main>
+<div class="stage">
+  <div class="preview-wrap">
+    <canvas id="preview" width="540" height="675"></canvas>
+    <div class="empty" id="empty">
+      <div>Pick a piece from your gallery to see it in a scene.</div>
+      <button class="btn primary" id="pickBtn" style="flex:0;padding:14px 28px">Pick art</button>
+    </div>
+  </div>
+</div>
+<div class="controls">
+  <section>
+    <h2>Scene</h2>
+    <div class="chips" id="sceneChips"></div>
+  </section>
+  <section>
+    <h2>Size</h2>
+    <div class="chips" id="formatChips"></div>
+  </section>
+  <section>
+    <h2>Look</h2>
+    <div class="panel">
+      <div class="row" data-for="frame,poster,gallery,desk"><label>Wall / desk</label><div class="chips" id="wallChips"></div></div>
+      <div class="row" data-for="frame,dark"><label>Frame</label><div class="chips" id="frameChips"></div></div>
+      <div class="row" data-for="clean"><label>Border colour</label><div class="chips" id="borderChips"></div></div>
+      <div class="row" data-for="phone"><label>Tilt phone</label><label class="switch"><input type="checkbox" id="tilt"><span></span></label></div>
+      <div class="row" data-for="gallery"><label>Title on label</label><input type="text" id="title" placeholder="Untitled" maxlength="40"></div>
+    </div>
+  </section>
+  <section>
+    <h2>Branding</h2>
+    <div class="panel">
+      <div class="row"><label>Signature</label><label class="switch"><input type="checkbox" id="sig"><span></span></label></div>
+      <div class="row"><label>Name</label><input type="text" id="sigText" maxlength="30"></div>
+      <div class="row"><label>Style</label><div class="chips" id="sigStyleChips"></div></div>
+      <div class="row"><label>Position</label><div class="chips" id="sigPosChips"></div></div>
+    </div>
+  </section>
+  <section>
+    <h2>Carousel set</h2>
+    <div class="panel" style="padding:12px 14px">
+      <div class="hint">Three slides in the chosen size: the full piece, a close-up detail, and the scene above. Tap the small picture to choose where the close-up is.</div>
+      <div class="focus-box"><canvas id="focusCanvas" width="10" height="10"></canvas></div>
+      <div class="row"><label>Close-up zoom</label><input type="range" id="zoom" min="1.5" max="5" step="0.1"></div>
+      <div class="carousel-grid">
+        <div><canvas id="c1"></canvas><small>1 · Full piece</small></div>
+        <div><canvas id="c2"></canvas><small>2 · Detail</small></div>
+        <div><canvas id="c3"></canvas><small>3 · Scene</small></div>
+      </div>
+    </div>
+  </section>
+  <section><p class="hint">Everything stays on your phone. Nothing is uploaded.</p></section>
+</div>
+</main>
+
+<div class="bar">
+  <button class="btn secondary" id="saveCarousel" disabled>Save carousel (3)</button>
+  <button class="btn primary" id="saveOne" disabled>Save image</button>
+</div>
+
+<div class="overlay" id="overlay">
+  <div class="imgs" id="overlayImgs"></div>
+  <p id="overlayHint">Tap <b>Save to phone</b>: images go to your Downloads and show up in your Gallery / Google Photos. <b>Share</b> sends them straight to an app like Instagram.</p>
+  <div class="actions">
+    <button class="btn secondary" id="closeOverlay">Close</button>
+    <button class="btn secondary" id="shareBtn">Share</button>
+    <button class="btn primary" id="downloadBtn">Save to phone</button>
+  </div>
+</div>
+<div class="busy" id="busy">Rendering…</div>
+<div class="toast" id="toast"></div>
+<input type="file" id="file" accept="image/*" hidden>
+
+<script>
+"use strict";
+/* ---------- settings ---------- */
+const FORMATS = {
+  ig45:  {w:1080,h:1350,label:'Instagram 4:5'},
+  ig11:  {w:1080,h:1080,label:'Square 1:1'},
+  story: {w:1080,h:1920,label:'Story / Reel 9:16'},
+  x169:  {w:1600,h:900, label:'Twitter / X 16:9'}
+};
+const SCENES = [
+  ['frame','Framed on wall'],['dark','Dark room glow'],['phone','Phone screen'],
+  ['gallery','Gallery'],['poster','Taped poster'],['desk','Desk print'],['clean','Clean border']
+];
+const DEFAULTS = {scene:'frame',format:'ig45',wall:'auto',frame:'black',border:'auto',tilt:true,
+  title:'',sig:true,sigText:'Nowhingness',sigStyle:'caps',sigPos:'br',zoom:2.5,focus:{x:.5,y:.5}};
+let state = Object.assign({}, DEFAULTS);
+try{ const s = JSON.parse(localStorage.getItem('nw-mockup-settings')||'null'); if(s) Object.assign(state, s, {focus:{x:.5,y:.5}}); }catch(e){}
+function persist(){ try{ const {focus, ...rest} = state; localStorage.setItem('nw-mockup-settings', JSON.stringify(rest)); }catch(e){} }
+
+let ART = null;   // {img,w,h,small,tiny,pal}
+let S = 1;        // current render scale (for shadow blur which ignores transforms)
+
+/* ---------- colour helpers ---------- */
+const rgb = (c,a=1)=>`rgba(${c[0]|0},${c[1]|0},${c[2]|0},${a})`;
+const mix = (a,b,t)=>[a[0]+(b[0]-a[0])*t, a[1]+(b[1]-a[1])*t, a[2]+(b[2]-a[2])*t];
+const lum = c=>(0.2126*c[0]+0.7152*c[1]+0.0722*c[2])/255;
+function analyse(img){
+  const n=32, c=document.createElement('canvas'); c.width=c.height=n;
+  const x=c.getContext('2d',{willReadFrequently:true}); x.drawImage(img,0,0,n,n);
+  const d=x.getImageData(0,0,n,n).data;
+  let sum=[0,0,0], vivid=[128,128,128], vs=-1, dark=[30,30,30], dl=9;
+  const vivids=[];
+  for(let i=0;i<d.length;i+=4){
+    const p=[d[i],d[i+1],d[i+2]]; sum[0]+=p[0];sum[1]+=p[1];sum[2]+=p[2];
+    const mx=Math.max(...p), mn=Math.min(...p), sat=mx?(mx-mn)/mx:0, score=sat*(mx/255);
+    if(score>vs){vs=score;vivid=p;}
+    vivids.push([score,p]);
+    const l=lum(p); if(l<dl){dl=l;dark=p;}
+  }
+  const cnt=d.length/4, avg=sum.map(v=>v/cnt);
+  // second vivid colour with a different hue for gradients
+  vivids.sort((a,b)=>b[0]-a[0]);
+  const hue=p=>{const [r,g,b]=p.map(v=>v/255),mx=Math.max(r,g,b),mn=Math.min(r,g,b);if(mx===mn)return 0;let h;
+    if(mx===r)h=(g-b)/(mx-mn);else if(mx===g)h=2+(b-r)/(mx-mn);else h=4+(r-g)/(mx-mn);return ((h*60)+360)%360;};
+  let vivid2=mix(vivid,[20,20,30],.6);
+  for(const [s,p] of vivids.slice(0,300)){ const dh=Math.abs(hue(p)-hue(vivid)); if(Math.min(dh,360-dh)>50 && s>0.25){vivid2=p;break;} }
+  return {avg,vivid,vivid2,dark};
+}
+function shrink(img,w,h,size){
+  const s=size/Math.max(w,h), c=document.createElement('canvas');
+  c.width=Math.max(1,Math.round(w*s)); c.height=Math.max(1,Math.round(h*s));
+  c.getContext('2d').drawImage(img,0,0,c.width,c.height); return c;
+}
+/* soft glow: art in the middle of a transparent canvas twice its size, box-blurred */
+function makeGlow(img,w,h){
+  const sm=shrink(img,w,h,40), cw=sm.width*2, ch=sm.height*2, c=document.createElement('canvas'); c.width=cw; c.height=ch;
+  const x=c.getContext('2d',{willReadFrequently:true}); x.drawImage(sm,sm.width/2,sm.height/2);
+  const id=x.getImageData(0,0,cw,ch), d=id.data, tmp=new Float32Array(d.length), R=5;
+  for(let pass=0;pass<3;pass++){
+    for(let y=0;y<ch;y++)for(let xx=0;xx<cw;xx++){let a=[0,0,0,0],n=0;for(let k=-R;k<=R;k++){const q=xx+k;if(q<0||q>=cw)continue;const i=(y*cw+q)*4;a[0]+=d[i]*d[i+3];a[1]+=d[i+1]*d[i+3];a[2]+=d[i+2]*d[i+3];a[3]+=d[i+3];n++;}
+      const o=(y*cw+xx)*4;tmp[o+3]=a[3]/n;for(let c2=0;c2<3;c2++)tmp[o+c2]=a[3]?a[c2]/a[3]:0;}
+    for(let xx=0;xx<cw;xx++)for(let y=0;y<ch;y++){let a=[0,0,0,0],n=0;for(let k=-R;k<=R;k++){const q=y+k;if(q<0||q>=ch)continue;const i=(q*cw+xx)*4;a[0]+=tmp[i]*tmp[i+3];a[1]+=tmp[i+1]*tmp[i+3];a[2]+=tmp[i+2]*tmp[i+3];a[3]+=tmp[i+3];n++;}
+      const o=(y*cw+xx)*4;d[o+3]=a[3]/n;for(let c2=0;c2<3;c2++)d[o+c2]=a[3]?a[c2]/a[3]:0;}
+  }
+  x.putImageData(id,0,0); return c;
+}
+/* noise texture, made once */
+const NOISE=(()=>{const c=document.createElement('canvas');c.width=c.height=256;const x=c.getContext('2d');
+  const id=x.createImageData(256,256);for(let i=0;i<id.data.length;i+=4){const v=Math.random()*255;id.data[i]=id.data[i+1]=id.data[i+2]=v;id.data[i+3]=255;}
+  x.putImageData(id,0,0);return c;})();
+function noise(ctx,W,H,alpha,mode='overlay'){
+  ctx.save();ctx.globalAlpha=alpha;ctx.globalCompositeOperation=mode;ctx.fillStyle=ctx.createPattern(NOISE,'repeat');ctx.fillRect(0,0,W,H);ctx.restore();
+}
+/* seeded random so scenes look the same in preview and export */
+function rng(seed){return ()=>{seed=(seed*16807)%2147483647;return (seed-1)/2147483646;};}
+
+/* ---------- drawing helpers ---------- */
+function shadow(ctx,blur,ox,oy,color){ctx.shadowColor=color;ctx.shadowBlur=blur*S;ctx.shadowOffsetX=ox*S;ctx.shadowOffsetY=oy*S;}
+function noShadow(ctx){ctx.shadowColor='transparent';ctx.shadowBlur=0;ctx.shadowOffsetX=0;ctx.shadowOffsetY=0;}
+function fit(w,h,mw,mh){const s=Math.min(mw/w,mh/h);return {w:w*s,h:h*s};}
+function rrect(ctx,x,y,w,h,r){ctx.beginPath();ctx.moveTo(x+r,y);ctx.arcTo(x+w,y,x+w,y+h,r);ctx.arcTo(x+w,y+h,x,y+h,r);ctx.arcTo(x,y+h,x,y,r);ctx.arcTo(x,y,x+w,y,r);ctx.closePath();}
+function drawCover(ctx,img,iw,ih,x,y,w,h,fx=.5,fy=.5,zoom=1){
+  const s=Math.max(w/iw,h/ih)*zoom, sw=w/s, sh=h/s;
+  let sx=fx*iw-sw/2, sy=fy*ih-sh/2;
+  sx=Math.max(0,Math.min(iw-sw,sx)); sy=Math.max(0,Math.min(ih-sh,sy));
+  ctx.drawImage(img,sx,sy,sw,sh,x,y,w,h);
+}
+function art(ctx,x,y,w,h){ctx.drawImage(ART.img,x,y,w,h);}
+
+function signature(ctx,W,H,color,opts={}){
+  if(!state.sig || !state.sigText.trim()) return;
+  const u=Math.min(W,H), m=opts.margin ?? u*0.045, pos=opts.pos||state.sigPos;
+  ctx.save(); noShadow(ctx); ctx.fillStyle=color; ctx.textBaseline='alphabetic';
+  let text=state.sigText.trim(), size;
+  if(state.sigStyle==='caps'){ size=u*0.022; ctx.font=`600 ${size}px system-ui,-apple-system,"Segoe UI",Roboto,sans-serif`; text=text.toUpperCase().split('').join('  '); }
+  else if(state.sigStyle==='script'){ size=u*0.038; ctx.font=`italic ${size}px Georgia,"Times New Roman",serif`; }
+  else { size=u*0.026; ctx.font=`500 ${size}px ui-monospace,Menlo,Consolas,monospace`; text='// '+text.toLowerCase(); }
+  const y=opts.y ?? (H-m);
+  if(pos==='bc'||opts.center){ctx.textAlign='center';ctx.fillText(text,opts.x??W/2,y);}
+  else if(pos==='bl'){ctx.textAlign='left';ctx.fillText(text,opts.x??m,y);}
+  else {ctx.textAlign='right';ctx.fillText(text,opts.x??W-m,y);}
+  ctx.restore();
+}
+
+function wallColor(kind){
+  const p=ART.pal;
+  switch(state.wall){
+    case 'light': return [238,236,232];
+    case 'warm':  return [226,214,196];
+    case 'dark':  return [34,34,38];
+    default:      return kind==='concrete'? mix(p.avg,[140,140,136],.8) : mix(p.vivid,[240,237,231],.86);
+  }
+}
+function frameFill(ctx,frame,x,y,w,h){
+  if(frame==='white') return '#f4f3f0';
+  if(frame==='oak'){const g=ctx.createLinearGradient(x,y,x+w,y+h);g.addColorStop(0,'#b88a5c');g.addColorStop(.5,'#a4774a');g.addColorStop(1,'#8c623b');return g;}
+  return '#141416';
+}
+/* framed artwork with optional mat; returns outer rect */
+function framed(ctx,W,H,cx,cy,maxW,maxH,frame,opts={}){
+  const u=Math.min(W,H);
+  const fw = frame==='none'?0:u*0.02, mw = frame==='none'||opts.noMat?0:u*0.055;
+  const r=fit(ART.w,ART.h,maxW-2*(fw+mw),maxH-2*(fw+mw));
+  const ow=r.w+2*(fw+mw), oh=r.h+2*(fw+mw), ox=cx-ow/2, oy=cy-oh/2;
+  ctx.save();
+  shadow(ctx,u*0.045,0,u*0.025,'rgba(0,0,0,.38)');
+  ctx.fillStyle = frame==='none' ? '#000' : frameFill(ctx,frame,ox,oy,ow,oh);
+  ctx.fillRect(ox,oy,ow,oh);
+  shadow(ctx,u*0.008,0,u*0.004,'rgba(0,0,0,.35)'); ctx.fillRect(ox,oy,ow,oh);
+  noShadow(ctx);
+  if(fw){
+    // bevel highlights
+    ctx.strokeStyle = frame==='black'?'rgba(255,255,255,.10)':'rgba(255,255,255,.35)'; ctx.lineWidth=u*0.003;
+    ctx.strokeRect(ox+u*0.0015,oy+u*0.0015,ow-u*0.003,oh-u*0.003);
+    if(frame==='oak') noiseRect(ctx,ox,oy,ow,oh,.18);
+    // mat
+    if(mw){ ctx.fillStyle='#f6f4ef'; ctx.fillRect(ox+fw,oy+fw,ow-2*fw,oh-2*fw); }
+    // inner frame shadow onto mat
+    const g=ctx.createLinearGradient(0,oy+fw,0,oy+fw+u*0.012); g.addColorStop(0,'rgba(0,0,0,.22)'); g.addColorStop(1,'rgba(0,0,0,0)');
+    ctx.fillStyle=g; ctx.fillRect(ox+fw,oy+fw,ow-2*fw,u*0.012);
+  }
+  const ax=ox+fw+mw, ay=oy+fw+mw;
+  if(mw){ ctx.strokeStyle='rgba(0,0,0,.18)'; ctx.lineWidth=u*0.004; ctx.strokeRect(ax-u*0.002,ay-u*0.002,r.w+u*0.004,r.h+u*0.004); }
+  art(ctx,ax,ay,r.w,r.h);
+  ctx.restore();
+  return {x:ox,y:oy,w:ow,h:oh,ax,ay,aw:r.w,ah:r.h};
+}
+function noiseRect(ctx,x,y,w,h,a){ctx.save();ctx.beginPath();ctx.rect(x,y,w,h);ctx.clip();noise(ctx,x+w+1,y+h+1,a);ctx.restore();}
+function wallLight(ctx,W,H,strength=.35){
+  let g=ctx.createRadialGradient(W*.5,-H*.1,0,W*.5,-H*.1,Math.max(W,H)*1.0);
+  g.addColorStop(0,`rgba(255,255,255,${strength})`); g.addColorStop(1,'rgba(255,255,255,0)');
+  ctx.fillStyle=g; ctx.fillRect(0,0,W,H);
+  g=ctx.createRadialGradient(W/2,H/2,Math.min(W,H)*.35,W/2,H/2,Math.hypot(W,H)*.62);
+  g.addColorStop(0,'rgba(0,0,0,0)'); g.addColorStop(1,'rgba(0,0,0,.22)');
+  ctx.fillStyle=g; ctx.fillRect(0,0,W,H);
+}
+const sigOn = c => lum(c)>0.55 ? 'rgba(20,20,24,.72)' : 'rgba(255,255,255,.82)';
+
+/* ---------- scenes ---------- */
+const DRAW = {
+  frame(ctx,W,H){
+    const wall=wallColor(), floorH=H*0.1, wallH=H-floorH;
+    ctx.fillStyle=rgb(wall); ctx.fillRect(0,0,W,H);
+    // floor + skirting
+    const fg=ctx.createLinearGradient(0,wallH,0,H); fg.addColorStop(0,'#9b8166'); fg.addColorStop(1,'#6d5640');
+    ctx.fillStyle=fg; ctx.fillRect(0,wallH,W,floorH);
+    ctx.fillStyle=rgb(mix(wall,[255,255,255],.35)); ctx.fillRect(0,wallH-H*0.018,W,H*0.018);
+    ctx.fillStyle='rgba(0,0,0,.12)'; ctx.fillRect(0,wallH,W,H*0.004);
+    wallLight(ctx,W,H); noise(ctx,W,H,.06);
+    framed(ctx,W,H,W/2,wallH*0.48,W*(H/W>1.5?0.8:0.62),wallH*0.7,state.frame);
+    signature(ctx,W,H,sigOn(wall),{y:wallH-H*0.035});
+  },
+  dark(ctx,W,H){
+    const bg=[9,9,11]; ctx.fillStyle=rgb(bg); ctx.fillRect(0,0,W,H);
+    const u=Math.min(W,H), r=fit(ART.w,ART.h,W*0.6,H*0.58);
+    const cx=W/2, cy=H*0.43, x=cx-r.w/2, y=cy-r.h/2;
+    // colour glow spilling from the art
+    ctx.save(); ctx.globalAlpha=1; ctx.drawImage(ART.glow,cx-r.w*1.25,cy-r.h*1.25,r.w*2.5,r.h*2.5);
+    ctx.globalAlpha=.8; ctx.drawImage(ART.glow,cx-r.w,cy-r.h,r.w*2,r.h*2); ctx.restore();
+    // darken edges so the glow fades out
+    let g=ctx.createRadialGradient(cx,cy,Math.max(r.w,r.h)*0.45,cx,cy,Math.hypot(W,H)*0.6);
+    g.addColorStop(0,'rgba(9,9,11,0)'); g.addColorStop(1,'rgba(9,9,11,1)'); ctx.fillStyle=g; ctx.fillRect(0,0,W,H);
+    ctx.fillStyle='rgba(9,9,11,.2)'; ctx.fillRect(0,0,W,H);
+    // floor reflection
+    const floorY=y+r.h+u*0.02;
+    ctx.save(); ctx.beginPath(); ctx.rect(0,floorY,W,H-floorY); ctx.clip();
+    ctx.translate(0,floorY*2); ctx.scale(1,-1); ctx.globalAlpha=.28; art(ctx,x,y-u*0.02,r.w,r.h); ctx.restore();
+    g=ctx.createLinearGradient(0,floorY,0,floorY+r.h*0.55); g.addColorStop(0,'rgba(9,9,11,.35)'); g.addColorStop(1,'rgba(9,9,11,1)');
+    ctx.fillStyle=g; ctx.fillRect(0,floorY,W,H-floorY);
+    // the art itself (thin frame option)
+    ctx.save();
+    if(state.frame!=='none'){ const fw=u*0.008; ctx.fillStyle=state.frame==='white'?'#eee':state.frame==='oak'?'#9a6e44':'#000';
+      shadow(ctx,u*0.03,0,u*0.01,'rgba(0,0,0,.6)'); ctx.fillRect(x-fw,y-fw,r.w+2*fw,r.h+2*fw); noShadow(ctx); }
+    art(ctx,x,y,r.w,r.h); ctx.restore();
+    noise(ctx,W,H,.05);
+    signature(ctx,W,H,'rgba(255,255,255,.7)');
+  },
+  phone(ctx,W,H){
+    const p=ART.pal, u=Math.min(W,H), wide=W/H>1.3;
+    const c1=mix(p.vivid,[10,10,14],.35), c2=mix(p.vivid2,[10,10,14],.55);
+    let g=ctx.createLinearGradient(0,0,W,H); g.addColorStop(0,rgb(c1)); g.addColorStop(1,rgb(c2));
+    ctx.fillStyle=g; ctx.fillRect(0,0,W,H);
+    ctx.save(); ctx.globalAlpha=.45; ctx.drawImage(ART.tiny,-W*0.1,-H*0.1,W*1.2,H*1.2); ctx.restore();
+    g=ctx.createRadialGradient(W/2,H/2,0,W/2,H/2,Math.hypot(W,H)*.6); g.addColorStop(0,'rgba(0,0,0,0)'); g.addColorStop(1,'rgba(0,0,0,.45)');
+    ctx.fillStyle=g; ctx.fillRect(0,0,W,H);
+    noise(ctx,W,H,.07);
+    let ph=H*(wide?0.84:0.74), pw=ph*0.49;
+    if(pw>W*(wide?0.32:0.6)){pw=W*(wide?0.32:0.6); ph=pw/0.49;}
+    const pcx = wide? W*0.7 : W/2, pcy=H*0.5;
+    if(wide){ // print of the art beside the phone
+      const r=fit(ART.w,ART.h,W*0.4,H*0.72), ax=W*0.3-r.w/2, ay=H/2-r.h/2;
+      ctx.save(); shadow(ctx,u*0.05,0,u*0.025,'rgba(0,0,0,.5)'); ctx.fillStyle='#fff'; const b=u*0.015;
+      ctx.fillRect(ax-b,ay-b,r.w+2*b,r.h+2*b); noShadow(ctx); art(ctx,ax,ay,r.w,r.h); ctx.restore();
+    }
+    ctx.save(); ctx.translate(pcx,pcy); if(state.tilt) ctx.rotate(-7*Math.PI/180);
+    const x=-pw/2, y=-ph/2, R=pw*0.15;
+    // side buttons
+    ctx.fillStyle='#2a2a2e'; ctx.fillRect(x-pw*0.012,y+ph*0.2,pw*0.02,ph*0.06); ctx.fillRect(x-pw*0.012,y+ph*0.29,pw*0.02,ph*0.1); ctx.fillRect(x+pw-pw*0.008,y+ph*0.26,pw*0.02,ph*0.12);
+    // body
+    shadow(ctx,u*0.07,u*0.02,u*0.04,'rgba(0,0,0,.55)');
+    const bg=ctx.createLinearGradient(x,y,x+pw,y+ph); bg.addColorStop(0,'#5a5a60'); bg.addColorStop(.5,'#1d1d21'); bg.addColorStop(1,'#46464c');
+    ctx.fillStyle=bg; rrect(ctx,x,y,pw,ph,R); ctx.fill(); noShadow(ctx);
+    ctx.fillStyle='#050506'; rrect(ctx,x+pw*0.012,y+pw*0.012,pw-pw*0.024,ph-pw*0.024,R*0.94); ctx.fill();
+    // screen
+    const ins=pw*0.04, sx=x+ins, sy=y+ins, sw=pw-2*ins, sh=ph-2*ins, sr=R*0.8;
+    ctx.save(); rrect(ctx,sx,sy,sw,sh,sr); ctx.clip();
+    ctx.drawImage(ART.small,sx-sw*0.1,sy-sh*0.1,sw*1.2,sh*1.2);
+    ctx.fillStyle='rgba(0,0,0,.35)'; ctx.fillRect(sx,sy,sw,sh);
+    const ar=ART.w/ART.h, sar=sw/sh;
+    if(Math.abs(ar-sar)/sar<0.18) drawCover(ctx,ART.img,ART.w,ART.h,sx,sy,sw,sh);
+    else { const r=fit(ART.w,ART.h,sw*0.94,sh*0.8); art(ctx,sx+(sw-r.w)/2,sy+(sh-r.h)/2,r.w,r.h); }
+    // glass reflection
+    const gl=ctx.createLinearGradient(sx,sy,sx+sw,sy+sh*0.6); gl.addColorStop(0,'rgba(255,255,255,.14)'); gl.addColorStop(.45,'rgba(255,255,255,0)');
+    ctx.fillStyle=gl; ctx.fillRect(sx,sy,sw,sh);
+    ctx.restore();
+    // camera pill
+    ctx.fillStyle='#000'; rrect(ctx,-pw*0.15,sy+ph*0.018,pw*0.3,pw*0.085,pw*0.0425); ctx.fill();
+    ctx.restore();
+    signature(ctx,W,H,'rgba(255,255,255,.85)');
+  },
+  gallery(ctx,W,H){
+    const wall = state.wall==='auto'?[241,240,236]:wallColor(), floorY=H*0.76, u=Math.min(W,H);
+    ctx.fillStyle=rgb(wall); ctx.fillRect(0,0,W,floorY);
+    let g=ctx.createLinearGradient(0,floorY,0,H); g.addColorStop(0,'#b9b6b0'); g.addColorStop(1,'#d8d5cf');
+    ctx.fillStyle=g; ctx.fillRect(0,floorY,W,H-floorY);
+    ctx.fillStyle='rgba(0,0,0,.08)'; ctx.fillRect(0,floorY,W,u*0.004);
+    // track light pools
+    for(const fx of [.5]){ g=ctx.createRadialGradient(W*fx,0,0,W*fx,0,floorY*1.05); g.addColorStop(0,'rgba(255,255,250,.45)'); g.addColorStop(1,'rgba(255,255,250,0)'); ctx.fillStyle=g; ctx.fillRect(0,0,W,floorY); }
+    noise(ctx,W,H,.05);
+    // bench
+    const bw=Math.min(W*0.5,u*0.75), bh=u*0.03, bx=W/2-bw/2, by=floorY+(H-floorY)*0.35;
+    ctx.fillStyle='rgba(0,0,0,.18)'; ctx.beginPath(); ctx.ellipse(W/2,by+u*0.12,bw*0.55,u*0.02,0,0,Math.PI*2); ctx.fill();
+    ctx.fillStyle='#2b2420'; ctx.fillRect(bx+bw*0.06,by+bh,u*0.018,u*0.11); ctx.fillRect(bx+bw*0.94-u*0.018,by+bh,u*0.018,u*0.11);
+    const bg=ctx.createLinearGradient(0,by,0,by+bh); bg.addColorStop(0,'#6b5141'); bg.addColorStop(1,'#3f2f25'); ctx.fillStyle=bg; ctx.fillRect(bx,by,bw,bh);
+    // art as canvas print (no frame) with label
+    const r=framed(ctx,W,H,W*0.47,floorY*0.46,W*0.6,floorY*0.66,'none');
+    // depth edge
+    ctx.fillStyle='rgba(0,0,0,.25)'; ctx.fillRect(r.x+r.w,r.y+u*0.003,u*0.006,r.h);
+    // wall label
+    const lw=u*0.13, lh=u*0.075, lx=Math.min(r.x+r.w+u*0.04, W-lw-u*0.03), ly=r.y+r.h-lh;
+    ctx.save(); shadow(ctx,u*0.006,0,u*0.003,'rgba(0,0,0,.18)'); ctx.fillStyle='#fbfbf9'; ctx.fillRect(lx,ly,lw,lh); noShadow(ctx);
+    ctx.fillStyle='#222'; ctx.textAlign='left'; const ls=u*0.0115;
+    ctx.font=`700 ${ls}px system-ui,sans-serif`; ctx.fillText((state.sigText||'Artist').toUpperCase(),lx+lw*0.1,ly+lh*0.3);
+    ctx.font=`italic ${ls}px Georgia,serif`; ctx.fillText(state.title||'Untitled',lx+lw*0.1,ly+lh*0.55,lw*0.8);
+    ctx.font=`${ls*0.9}px system-ui,sans-serif`; ctx.fillStyle='#666'; ctx.fillText('Digital art, '+new Date().getFullYear(),lx+lw*0.1,ly+lh*0.8);
+    ctx.restore();
+  },
+  poster(ctx,W,H){
+    const u=Math.min(W,H), base=wallColor('concrete'), R=rng(7);
+    ctx.fillStyle=rgb(base); ctx.fillRect(0,0,W,H);
+    for(let i=0;i<14;i++){ const x=R()*W,y=R()*H,rad=u*(0.1+R()*0.35); const g=ctx.createRadialGradient(x,y,0,x,y,rad);
+      g.addColorStop(0,`rgba(0,0,0,${0.04+R()*0.06})`); g.addColorStop(1,'rgba(0,0,0,0)'); ctx.fillStyle=g; ctx.fillRect(0,0,W,H); }
+    noise(ctx,W,H,.22); noise(ctx,W,H,.08,'multiply');
+    wallLight(ctx,W,H,.25);
+    const r=fit(ART.w,ART.h,W*0.64,H*0.68), b=u*0.022, pw=r.w+2*b, ph=r.h+2*b;
+    ctx.save(); ctx.translate(W/2,H*0.48); ctx.rotate(-1.4*Math.PI/180);
+    shadow(ctx,u*0.025,u*0.006,u*0.014,'rgba(0,0,0,.4)'); ctx.fillStyle='#f7f6f2'; ctx.fillRect(-pw/2,-ph/2,pw,ph); noShadow(ctx);
+    art(ctx,-r.w/2,-r.h/2,r.w,r.h);
+    // paper shading / slight wave
+    const g=ctx.createLinearGradient(-pw/2,0,pw/2,0); g.addColorStop(0,'rgba(255,255,255,.08)'); g.addColorStop(.5,'rgba(0,0,0,.05)'); g.addColorStop(1,'rgba(255,255,255,.06)');
+    ctx.fillStyle=g; ctx.fillRect(-pw/2,-ph/2,pw,ph);
+    // tape
+    const tw=u*0.13, th=u*0.04;
+    for(const [tx,ty,a] of [[-pw/2,-ph/2,-38],[pw/2,-ph/2,38],[-pw/2,ph/2,38],[pw/2,ph/2,-38]]){
+      ctx.save(); ctx.translate(tx,ty); ctx.rotate(a*Math.PI/180); ctx.fillStyle='rgba(236,228,206,.82)'; ctx.fillRect(-tw/2,-th/2,tw,th);
+      ctx.fillStyle='rgba(255,255,255,.18)'; ctx.fillRect(-tw/2,-th/2,tw,th*0.3); ctx.restore();
+    }
+    ctx.restore();
+    signature(ctx,W,H,sigOn(base));
+  },
+  desk(ctx,W,H){
+    const u=Math.min(W,H), R=rng(42);
+    const tone = state.wall==='dark'?[52,38,30]: state.wall==='light'?[196,170,138]: [134,92,62];
+    let g=ctx.createLinearGradient(0,0,W,H); g.addColorStop(0,rgb(mix(tone,[255,255,255],.08))); g.addColorStop(1,rgb(mix(tone,[0,0,0],.15)));
+    ctx.fillStyle=g; ctx.fillRect(0,0,W,H);
+    // wood grain
+    for(let i=0;i<170;i++){ const y=R()*H, amp=u*(0.002+R()*0.01), f=1+R()*3, ph=R()*6;
+      ctx.strokeStyle=`rgba(40,22,10,${0.05+R()*0.18})`; ctx.lineWidth=u*(0.001+R()*0.004); ctx.beginPath();
+      for(let x=0;x<=W;x+=W/40){ const yy=y+Math.sin(x/W*Math.PI*f+ph)*amp; x?ctx.lineTo(x,yy):ctx.moveTo(x,yy);} ctx.stroke(); }
+    ctx.fillStyle='rgba(0,0,0,.25)'; for(const k of [0.33,0.71]) ctx.fillRect(0,H*k,W,u*0.003);
+    noise(ctx,W,H,.12);
+    // print
+    const r=fit(ART.w,ART.h,W*0.6,H*0.62), b=u*0.03, pw=r.w+2*b, ph=r.h+2*b;
+    ctx.save(); ctx.translate(W/2,H/2); ctx.rotate(2.5*Math.PI/180);
+    shadow(ctx,u*0.03,u*0.01,u*0.018,'rgba(0,0,0,.45)'); ctx.fillStyle='#faf9f6'; ctx.fillRect(-pw/2,-ph/2,pw,ph); noShadow(ctx);
+    art(ctx,-r.w/2,-r.h/2,r.w,r.h); ctx.restore();
+    // plant from above (top-left)
+    const px=W*0.06, py=H*0.07, pr=u*0.15;
+    ctx.save(); shadow(ctx,u*0.03,u*0.01,u*0.015,'rgba(0,0,0,.45)');
+    ctx.fillStyle='#b4573a'; ctx.beginPath(); ctx.arc(px,py,pr,0,Math.PI*2); ctx.fill(); noShadow(ctx);
+    ctx.fillStyle='#4a2d1d'; ctx.beginPath(); ctx.arc(px,py,pr*0.85,0,Math.PI*2); ctx.fill();
+    for(let i=0;i<11;i++){ const a=i/11*Math.PI*2+0.3, l=pr*(1.05+R()*0.35);
+      ctx.save(); ctx.translate(px,py); ctx.rotate(a); const lg=ctx.createLinearGradient(0,0,l,0); lg.addColorStop(0,'#1f5a2e'); lg.addColorStop(1,'#4f9a4f');
+      ctx.fillStyle=lg; ctx.beginPath(); ctx.ellipse(l*0.55,0,l*0.5,pr*0.17,0,0,Math.PI*2); ctx.fill();
+      ctx.strokeStyle='rgba(255,255,255,.15)'; ctx.lineWidth=u*0.002; ctx.beginPath(); ctx.moveTo(l*0.1,0); ctx.lineTo(l,0); ctx.stroke(); ctx.restore(); }
+    ctx.restore();
+    // mug (bottom-right)
+    const mx=W*0.92, my=H*0.92, mr=u*0.085;
+    ctx.save(); shadow(ctx,u*0.03,u*0.01,u*0.015,'rgba(0,0,0,.45)');
+    ctx.fillStyle='#ecebe7'; ctx.beginPath(); ctx.arc(mx,my,mr,0,Math.PI*2); ctx.fill();
+    ctx.lineWidth=mr*0.22; ctx.strokeStyle='#ecebe7'; ctx.beginPath(); ctx.arc(mx-mr*1.15,my-mr*0.2,mr*0.32,0,Math.PI*2); ctx.stroke(); noShadow(ctx);
+    const cg=ctx.createRadialGradient(mx-mr*0.2,my-mr*0.2,0,mx,my,mr*0.8); cg.addColorStop(0,'#6b3e22'); cg.addColorStop(1,'#2e170b');
+    ctx.fillStyle=cg; ctx.beginPath(); ctx.arc(mx,my,mr*0.8,0,Math.PI*2); ctx.fill(); ctx.restore();
+    // pencil (bottom-left)
+    ctx.save(); ctx.translate(W*0.1,H*0.86); ctx.rotate(-28*Math.PI/180);
+    const L=u*0.34, T=u*0.022; shadow(ctx,u*0.01,u*0.004,u*0.008,'rgba(0,0,0,.4)');
+    ctx.fillStyle='#e8b923'; ctx.fillRect(-L/2,-T/2,L,T); noShadow(ctx);
+    ctx.fillStyle='rgba(0,0,0,.12)'; ctx.fillRect(-L/2,0,L,T/2);
+    ctx.fillStyle='#e9cfa5'; ctx.beginPath(); ctx.moveTo(L/2,-T/2); ctx.lineTo(L/2+T*1.6,0); ctx.lineTo(L/2,T/2); ctx.fill();
+    ctx.fillStyle='#333'; ctx.beginPath(); ctx.moveTo(L/2+T*1.1,-T*0.17); ctx.lineTo(L/2+T*1.6,0); ctx.lineTo(L/2+T*1.1,T*0.17); ctx.fill();
+    ctx.fillStyle='#c9c9c9'; ctx.fillRect(-L/2-T*0.6,-T/2,T*0.6,T); ctx.fillStyle='#e58a9a'; ctx.fillRect(-L/2-T*1.3,-T/2,T*0.7,T);
+    ctx.restore();
+    signature(ctx,W,H,'rgba(255,255,255,.8)',{pos:state.sigPos==='br'?'bc':state.sigPos});
+  },
+  clean(ctx,W,H){
+    const p=ART.pal, u=Math.min(W,H);
+    const bg = state.border==='white'?[246,245,241]: state.border==='black'?[12,12,14]:
+               state.border==='colour'?mix(p.vivid,[12,12,14],.25): (lum(p.avg)>0.5?[18,18,20]:[244,243,239]);
+    ctx.fillStyle=rgb(bg); ctx.fillRect(0,0,W,H);
+    const m=u*0.075, sigSpace = state.sig?u*0.06:0;
+    const r=fit(ART.w,ART.h,W-2*m,H-2*m-sigSpace), x=(W-r.w)/2, y=(H-sigSpace-r.h)/2;
+    ctx.save(); if(lum(bg)>0.5) shadow(ctx,u*0.02,0,u*0.008,'rgba(0,0,0,.18)'); ctx.fillStyle='#000'; ctx.fillRect(x,y,r.w,r.h); noShadow(ctx);
+    art(ctx,x,y,r.w,r.h); ctx.restore();
+    signature(ctx,W,H,sigOn(bg),{y:y+r.h+sigSpace*0.72,pos:state.sigPos,x:state.sigPos==='bl'?x:state.sigPos==='br'?x+r.w:W/2});
+  },
+  detail(ctx,W,H){
+    drawCover(ctx,ART.img,ART.w,ART.h,0,0,W,H,state.focus.x,state.focus.y,state.zoom);
+    const g=ctx.createLinearGradient(0,H*0.8,0,H); g.addColorStop(0,'rgba(0,0,0,0)'); g.addColorStop(1,'rgba(0,0,0,.35)');
+    ctx.fillStyle=g; ctx.fillRect(0,H*0.8,W,H*0.2);
+    signature(ctx,W,H,'rgba(255,255,255,.88)');
+  }
+};
+
+/* ---------- render ---------- */
+function render(canvas,scene,fmt,maxPx){
+  const F=FORMATS[fmt], s=maxPx?Math.min(1,maxPx/Math.max(F.w,F.h)):1;
+  canvas.width=Math.round(F.w*s); canvas.height=Math.round(F.h*s);
+  const ctx=canvas.getContext('2d'); S=s;
+  ctx.setTransform(s,0,0,s,0,0); ctx.imageSmoothingEnabled=true; ctx.imageSmoothingQuality='high';
+  ctx.clearRect(0,0,F.w,F.h);
+  DRAW[scene](ctx,F.w,F.h);
+  noShadow(ctx); ctx.setTransform(1,0,0,1,0,0); S=1;
+  return canvas;
+}
+
+const $=id=>document.getElementById(id);
+let raf=0;
+function refresh(){
+  cancelAnimationFrame(raf);
+  raf=requestAnimationFrame(()=>{
+    document.querySelectorAll('.row[data-for]').forEach(r=>{ r.style.display = r.dataset.for.split(',').includes(state.scene)?'':'none'; });
+    if(!ART) return;
+    render($('preview'),state.scene,state.format,1100);
+    render($('c1'),'clean',state.format,360);
+    render($('c2'),'detail',state.format,360);
+    render($('c3'),state.scene==='clean'?'frame':state.scene,state.format,360);
+    drawFocus();
+  });
+}
+function drawFocus(){
+  const c=$('focusCanvas'), sz=fit(ART.w,ART.h,600,400);
+  c.width=Math.round(sz.w); c.height=Math.round(sz.h);
+  const x=c.getContext('2d'); x.drawImage(ART.img,0,0,c.width,c.height);
+  // show crop box for the detail slide
+  const F=FORMATS[state.format], s=Math.max(c.width/F.w, c.height/F.h); // cover scale at zoom 1
+  const cw=F.w*s/state.zoom, ch=F.h*s/state.zoom;
+  let bx=state.focus.x*c.width-cw/2, by=state.focus.y*c.height-ch/2;
+  bx=Math.max(0,Math.min(c.width-cw,bx)); by=Math.max(0,Math.min(c.height-ch,by));
+  x.fillStyle='rgba(0,0,0,.5)'; x.fillRect(0,0,c.width,c.height);
+  x.drawImage(ART.img,bx/c.width*ART.w,by/c.height*ART.h,cw/c.width*ART.w,ch/c.height*ART.h,bx,by,cw,ch);
+  x.strokeStyle='#fff'; x.lineWidth=3; x.strokeRect(bx,by,cw,ch);
+}
+
+/* ---------- UI ---------- */
+function chips(el,items,key){
+  el.innerHTML='';
+  for(const [val,label] of items){
+    const b=document.createElement('button'); b.className='chip'; b.textContent=label; b.dataset.val=val;
+    b.setAttribute('aria-pressed',state[key]===val);
+    b.onclick=()=>{ state[key]=val; el.querySelectorAll('.chip').forEach(c=>c.setAttribute('aria-pressed',c.dataset.val===val)); persist(); refresh(); };
+    el.appendChild(b);
+  }
+}
+chips($('sceneChips'),SCENES,'scene');
+chips($('formatChips'),Object.entries(FORMATS).map(([k,v])=>[k,v.label]),'format');
+chips($('wallChips'),[['auto','Auto'],['light','Light'],['warm','Warm'],['dark','Dark']],'wall');
+chips($('frameChips'),[['black','Black'],['white','White'],['oak','Oak'],['none','None']],'frame');
+chips($('borderChips'),[['auto','Auto'],['white','White'],['black','Black'],['colour','From art']],'border');
+chips($('sigStyleChips'),[['caps','CAPS'],['script','Script'],['mono','mono']],'sigStyle');
+chips($('sigPosChips'),[['bl','Left'],['bc','Centre'],['br','Right']],'sigPos');
+$('tilt').checked=state.tilt; $('tilt').onchange=e=>{state.tilt=e.target.checked;persist();refresh();};
+$('sig').checked=state.sig; $('sig').onchange=e=>{state.sig=e.target.checked;persist();refresh();};
+$('sigText').value=state.sigText; $('sigText').oninput=e=>{state.sigText=e.target.value;persist();refresh();};
+$('title').value=state.title; $('title').oninput=e=>{state.title=e.target.value;persist();refresh();};
+$('zoom').value=state.zoom; $('zoom').oninput=e=>{state.zoom=+e.target.value;persist();refresh();};
+function setFocus(e){ const r=$('focusCanvas').getBoundingClientRect();
+  state.focus={x:Math.max(0,Math.min(1,(e.clientX-r.left)/r.width)), y:Math.max(0,Math.min(1,(e.clientY-r.top)/r.height))}; refresh(); }
+$('focusCanvas').addEventListener('pointerdown',e=>{ if(!ART) return; $('focusCanvas').setPointerCapture(e.pointerId); setFocus(e); });
+$('focusCanvas').addEventListener('pointermove',e=>{ if(ART && e.buttons) setFocus(e); });
+
+$('pickBtn').onclick=$('pickBtn2').onclick=()=>$('file').click();
+$('file').onchange=async e=>{
+  const f=e.target.files[0]; if(!f) return;
+  busy(true);
+  try{
+    const img=await loadImage(f);
+    const w=img.naturalWidth||img.width, h=img.naturalHeight||img.height;
+    ART={img,w,h,small:shrink(img,w,h,48),tiny:shrink(img,w,h,10),glow:makeGlow(img,w,h),pal:analyse(img),name:f.name.replace(/\.[^.]+$/,'')};
+    state.focus={x:.5,y:.5};
+    $('empty').hidden=true; $('pickBtn2').hidden=false; $('saveOne').disabled=false; $('saveCarousel').disabled=false;
+    refresh();
+  }catch(err){ toast('Could not open that image'); console.error(err); }
+  busy(false); e.target.value='';
+};
+function loadImage(file){ return new Promise((res,rej)=>{ const url=URL.createObjectURL(file), img=new Image();
+  img.onload=()=>res(img); img.onerror=rej; img.src=url; }); }
+
+/* ---------- export ---------- */
+let pending=[];
+function toBlob(canvas){ return new Promise(r=>canvas.toBlob(r,'image/jpeg',0.95)); }
+async function exportSet(list){
+  busy(true);
+  await new Promise(r=>setTimeout(r,30));
+  const stamp=new Date().toISOString().slice(0,16).replace(/[-:T]/g,'');
+  const files=[];
+  for(const [scene,tag] of list){
+    const c=render(document.createElement('canvas'),scene,state.format);
+    const blob=await toBlob(c);
+    files.push(new File([blob],`nowhingness-${tag}-${state.format}-${stamp}.jpg`,{type:'image/jpeg'}));
+  }
+  busy(false);
+  showOverlay(files);
+}
+function showOverlay(files){
+  pending.forEach(p=>URL.revokeObjectURL(p.url));
+  pending=files.map(f=>({file:f,url:URL.createObjectURL(f)}));
+  const box=$('overlayImgs'); box.innerHTML='';
+  for(const p of pending){ const im=new Image(); im.src=p.url; im.alt=p.file.name; box.appendChild(im); }
+  const canShare = !!(navigator.canShare && navigator.canShare({files}));
+  $('shareBtn').hidden=!canShare;
+  $('overlay').classList.add('open');
+}
+$('closeOverlay').onclick=()=>$('overlay').classList.remove('open');
+$('shareBtn').onclick=async()=>{
+  try{ await navigator.share({files:pending.map(p=>p.file)}); toast('Done'); }
+  catch(e){ if(e.name!=='AbortError'){ toast('Sharing failed, use Download'); console.warn(e);} }
+};
+$('downloadBtn').onclick=async()=>{
+  for(const p of pending){ const a=document.createElement('a'); a.href=p.url; a.download=p.file.name; document.body.appendChild(a); a.click(); a.remove(); await new Promise(r=>setTimeout(r,400)); }
+  toast(pending.length>1?'Saving '+pending.length+' images':'Saved');
+};
+$('saveOne').onclick=()=>exportSet([[state.scene,state.scene]]);
+$('saveCarousel').onclick=()=>exportSet([['clean','1-full'],['detail','2-detail'],[state.scene==='clean'?'frame':state.scene,'3-scene']]);
+
+function busy(on){ $('busy').classList.toggle('show',on); }
+let tt; function toast(t){ const el=$('toast'); el.textContent=t; el.classList.add('show'); clearTimeout(tt); tt=setTimeout(()=>el.classList.remove('show'),2200); }
+
+refresh();
+if('serviceWorker' in navigator && location.protocol.startsWith('http')) navigator.serviceWorker.register('sw.js').catch(()=>{});
+</script>
+</body>
+</html>
