@@ -9,6 +9,7 @@ A mockup maker that runs in your phone's browser. Pick a piece from your gallery
 - **Device screens are filled by default.** Drag the preview to choose which part of the art shows. The phone turns sideways for landscape art. Switch off "Fill the screen" to show the whole piece instead.
 - **4 sizes:** Instagram 4:5 (1080×1350), Square (1080×1080), Story/Reel (1080×1920), Twitter/X 16:9 (1600×900).
 - **Carousel set:** saves 3 slides in one go: the full piece on a clean border, a close-up detail (tap the small picture to choose where, and use the slider to zoom), and the scene you chose.
+- **Batch:** pick several pieces at once. Each piece gets a carousel (with an automatic close-up of its busiest area), the scene you chose, an auto title and a caption. Then you save all the images in one tap and copy each caption, or save all the captions as a text file.
 - **Branding:** a "NOWHINGNESS" signature you can turn on or off, in three styles (CAPS, Script, mono) and three positions. Your choices are remembered.
 - **Colours come from your art.** The "Auto" wall, the phone background and the dark-room glow use colours taken from the piece.
 - **My photo:** pick a photo of your own wall, desk or screen, then drag the 4 pink corners to place your art in it with real perspective. It has an optional frame and a slider that lets the photo's light show on the art.

@@ -72,6 +72,11 @@ textarea{width:100%;min-height:170px;background:var(--chip);border:0;border-radi
 .overlay .imgs{flex:1;overflow-y:auto;display:flex;flex-direction:column;gap:12px;align-items:center;padding:8px 0}
 .overlay img{max-width:100%;max-height:70vh;border-radius:6px;-webkit-touch-callout:default}
 .overlay .actions{display:flex;gap:10px}
+.overlay .piece{width:100%;max-width:520px;background:#15151a;border-radius:12px;padding:12px;display:flex;flex-direction:column;gap:10px}
+.overlay .piece h3{margin:0;font-size:15px}
+.overlay .piece .thumbs{display:grid;grid-template-columns:repeat(2,1fr);gap:8px}
+.overlay .piece .thumbs img{width:100%;max-height:none;border-radius:6px}
+.overlay .piece textarea{min-height:120px}
 .overlay p{color:var(--muted);font-size:13px;text-align:center;margin:8px 0}
 .toast{position:fixed;left:50%;bottom:100px;transform:translateX(-50%);background:#fff;color:#111;padding:10px 16px;border-radius:999px;font-size:14px;z-index:20;opacity:0;transition:.25s;pointer-events:none}
 .toast.show{opacity:1}
@@ -170,6 +175,14 @@ textarea{width:100%;min-height:170px;background:var(--chip);border:0;border-radi
       </details>
     </div>
   </section>
+  <section>
+    <h2>Batch: several pieces at once</h2>
+    <div class="panel" style="padding:12px 14px">
+      <div class="hint" style="margin-top:0">Pick several pieces. Each one gets the carousel (full piece, an automatic close-up, and the scene you chose above), a title and a caption, using all your current settings.</div>
+      <div class="row"><label>Include</label><div class="chips" id="batchModeChips"></div></div>
+      <button class="btn primary" id="batchBtn" style="width:100%;margin-top:8px">Pick pieces for batch</button>
+    </div>
+  </section>
   <section><p class="hint">Everything stays on your phone. Nothing is uploaded.</p></section>
 </div>
 </main>
@@ -192,6 +205,7 @@ textarea{width:100%;min-height:170px;background:var(--chip);border:0;border-radi
 <div class="toast" id="toast"></div>
 <input type="file" id="file" accept="image/*" hidden>
 <input type="file" id="bgFile" accept="image/*" hidden>
+<input type="file" id="batchFile" accept="image/*" multiple hidden>
 
 <script>
 "use strict";
@@ -207,7 +221,7 @@ const SCENES = [
   ['gallery','Gallery'],['poster','Taped poster'],['desk','Desk print'],['tablet','Tablet'],['laptop','Laptop'],['monitor','Desktop monitor'],['clean','Clean border']
 ];
 const DEFAULTS = {scene:'frame',format:'ig45',wall:'auto',frame:'black',border:'auto',tilt:true,
-  title:'',blend:0.3,capPlat:'ig',capStyle:'glitch',capApp:'Glitchlab',capMood:'',capCta:'save',capTagPlace:'caption',artSize:1,fillScreen:true,sig:true,sigText:'Nowhingness',sigStyle:'caps',sigPos:'br',zoom:2.5,focus:{x:.5,y:.5},pan:{x:.5,y:.5}};
+  title:'',blend:0.3,batchMode:'carousel',capPlat:'ig',capStyle:'glitch',capApp:'Glitchlab',capMood:'',capCta:'save',capTagPlace:'caption',artSize:1,fillScreen:true,sig:true,sigText:'Nowhingness',sigStyle:'caps',sigPos:'br',zoom:2.5,focus:{x:.5,y:.5},pan:{x:.5,y:.5}};
 let state = Object.assign({}, DEFAULTS);
 try{ const s = JSON.parse(localStorage.getItem('nw-mockup-settings')||'null'); if(s) Object.assign(state, s, {focus:{x:.5,y:.5},pan:{x:.5,y:.5}}); }catch(e){}
 function persist(){ try{ const {focus, pan, ...rest} = state; localStorage.setItem('nw-mockup-settings', JSON.stringify(rest)); }catch(e){} }
@@ -830,7 +844,7 @@ $('file').onchange=async e=>{
   try{
     const img=await loadImage(f);
     const w=img.naturalWidth||img.width, h=img.naturalHeight||img.height;
-    ART={img,w,h,mid:shrink(img,w,h,1400),small:shrink(img,w,h,48),tiny:shrink(img,w,h,10),glow:makeGlow(img,w,h),pal:analyse(img),name:f.name.replace(/\.[^.]+$/,'')};
+    ART=makeArt(img,f.name);
     state.focus={x:.5,y:.5}; state.pan={x:.5,y:.5}; for(const k in QUADS) delete QUADS[k];
     $('empty').hidden=true; $('pickBtn2').hidden=false; $('saveOne').disabled=false; $('saveCarousel').disabled=false;
     try{ onArtLoaded(); }catch(err){ console.error(err); }
@@ -838,6 +852,8 @@ $('file').onchange=async e=>{
   }catch(err){ toast('Could not open that image'); console.error(err); }
   busy(false); e.target.value='';
 };
+function makeArt(img,name){ const w=img.naturalWidth||img.width, h=img.naturalHeight||img.height;
+  return {img,w,h,mid:shrink(img,w,h,1400),small:shrink(img,w,h,48),tiny:shrink(img,w,h,10),glow:makeGlow(img,w,h),pal:analyse(img),name:(name||'art').replace(/\.[^.]+$/,'')}; }
 function loadImage(file){ return new Promise((res,rej)=>{ const url=URL.createObjectURL(file), img=new Image();
   img.onload=()=>res(img); img.onerror=rej; img.src=url; }); }
 
@@ -876,6 +892,76 @@ $('downloadBtn').onclick=async()=>{
   toast(pending.length>1?'Saving '+pending.length+' images':'Saved');
 };
 $('saveOne').onclick=()=>exportSet([[state.scene,state.scene]]);
+/* ---------- batch ---------- */
+function autoFocus(img){ // the busiest area of the piece makes the best close-up
+  const sm=shrink(img,img.naturalWidth||img.width,img.naturalHeight||img.height,96), w=sm.width, h=sm.height;
+  const d=sm.getContext('2d',{willReadFrequently:true}).getImageData(0,0,w,h).data, G=6, e=new Float32Array(G*G);
+  const l=i=>0.2126*d[i]+0.7152*d[i+1]+0.0722*d[i+2];
+  for(let y=1;y<h-1;y++) for(let x=1;x<w-1;x++){ const i=(y*w+x)*4;
+    const g=Math.abs(l(i)-l(i+4))+Math.abs(l(i)-l(i+w*4)); const gx=Math.min(G-1,Math.floor(x/w*G)), gy=Math.min(G-1,Math.floor(y/h*G));
+    // prefer the middle a little, so the close-up is not stuck on an edge
+    const c=1-0.35*Math.hypot((gx+.5)/G-.5,(gy+.5)/G-.5); e[gy*G+gx]+=g*c; }
+  let best=0; for(let k=1;k<e.length;k++) if(e[k]>e[best]) best=k;
+  return {x:((best%G)+.5)/G, y:(Math.floor(best/G)+.5)/G};
+}
+chips($('batchModeChips'),[['carousel','Carousel (3)'],['scene','Scene only'],['both','Both']],'batchMode');
+$('batchBtn').onclick=()=>$('batchFile').click();
+$('batchFile').onchange=async e=>{
+  const list=[...e.target.files]; e.target.value=''; if(!list.length) return;
+  const saved={ART,LOOK,TITLE_SPACE,title:state.title,focus:state.focus,pan:state.pan,capStyle:state.capStyle};
+  const stamp=new Date().toISOString().slice(0,16).replace(/[-:T]/g,'');
+  const scene=state.scene==='clean'?'frame':state.scene, results=[];
+  busy(true);
+  try{
+    for(let n=0;n<list.length;n++){
+      $('busy').textContent=`Rendering piece ${n+1} of ${list.length}…`; await new Promise(r=>setTimeout(r,20));
+      const img=await loadImage(list[n]); ART=makeArt(img,list[n].name);
+      LOOK=inspect(img); state.capStyle=LOOK.style; state.focus=autoFocus(img); state.pan={x:.5,y:.5};
+      const idea=titleIdeas(LOOK,rng(Math.floor(Math.random()*1e6)+1))[0];
+      state.title=idea.t; TITLE_SPACE={title:idea.t,space:idea.space};
+      capSeed=Math.floor(Math.random()*1e6)+1; buildCaption(); rememberTags();
+      const jobs = state.batchMode==='scene' ? [[scene,'scene']] :
+                   state.batchMode==='both' ? [['clean','1-full'],['detail','2-detail'],[scene,'3-scene'],['frame'===scene?'dark':'frame','extra']] :
+                   [['clean','1-full'],['detail','2-detail'],[scene,'3-scene']];
+      const slug=idea.t.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'');
+      const files=[];
+      for(const [sc,tag] of jobs){ const c=render(document.createElement('canvas'),sc,state.format);
+        files.push(new File([await toBlob(c)],`nowhingness-${slug}-${tag}-${stamp}.jpg`,{type:'image/jpeg'})); }
+      results.push({title:idea.t,caption:CAP.text,tags:CAP.tags.join(' '),files});
+    }
+  }catch(err){ console.error(err); toast('One of the pieces could not be opened'); }
+  // put the piece you were working on back
+  ART=saved.ART; LOOK=saved.LOOK; TITLE_SPACE=saved.TITLE_SPACE; state.title=saved.title; state.focus=saved.focus; state.pan=saved.pan; state.capStyle=saved.capStyle;
+  $('capStyleChips').querySelectorAll('.chip').forEach(c=>c.setAttribute('aria-pressed',c.dataset.val===state.capStyle));
+  buildCaption(); busy(false); $('busy').textContent='Rendering…';
+  if(results.length) showBatch(results);
+};
+function showBatch(results){
+  pending.forEach(p=>URL.revokeObjectURL(p.url));
+  const all=results.flatMap(r=>r.files);
+  pending=all.map(f=>({file:f,url:URL.createObjectURL(f)}));
+  const box=$('overlayImgs'); box.innerHTML=''; let k=0;
+  const head=document.createElement('p'); head.textContent=`${results.length} pieces, ${all.length} images. Captions are below each piece.`; box.appendChild(head);
+  const capAll=document.createElement('button'); capAll.className='chip'; capAll.textContent='Save all captions as a text file';
+  capAll.onclick=()=>{ const txt=results.map(r=>r.caption).join('\n\n------------------------------\n\n');
+    const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([txt],{type:'text/plain'})); a.download='nowhingness-captions.txt'; a.click(); };
+  box.appendChild(capAll);
+  for(const r of results){
+    const d=document.createElement('div'); d.className='piece';
+    const h=document.createElement('h3'); h.textContent=r.title; d.appendChild(h);
+    const th=document.createElement('div'); th.className='thumbs';
+    r.files.forEach(()=>{ const im=new Image(); im.src=pending[k].url; im.alt=pending[k].file.name; th.appendChild(im); k++; });
+    d.appendChild(th);
+    const ta=document.createElement('textarea'); ta.value=r.caption; d.appendChild(ta);
+    const row=document.createElement('div'); row.className='btnrow';
+    const b1=document.createElement('button'); b1.className='chip'; b1.textContent='Copy caption'; b1.onclick=()=>copyText(ta.value,'Caption copied');
+    const b2=document.createElement('button'); b2.className='chip'; b2.textContent='Copy hashtags'; b2.onclick=()=>copyText(r.tags,'Hashtags copied');
+    row.append(b1,b2); d.appendChild(row); box.appendChild(d);
+  }
+  const canShare = !!(navigator.canShare && navigator.canShare({files:all}));
+  $('shareBtn').hidden=!canShare;
+  $('overlay').classList.add('open');
+}
 $('saveCarousel').onclick=()=>exportSet([['clean','1-full'],['detail','2-detail'],[state.scene==='clean'?'frame':state.scene,'3-scene']]);
 
 function busy(on){ $('busy').classList.toggle('show',on); }
