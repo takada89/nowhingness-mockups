@@ -118,6 +118,8 @@ textarea{width:100%;min-height:170px;background:var(--chip);border:0;border-radi
   <section>
     <h2>Size</h2>
     <div class="chips" id="formatChips"></div>
+    <div class="row" style="margin-top:10px"><label>Save quality</label><div class="chips" id="qualityChips"></div></div>
+    <p class="hint" id="qualityHint"></p>
   </section>
   <section>
     <h2>Look</h2>
@@ -196,7 +198,7 @@ textarea{width:100%;min-height:170px;background:var(--chip);border:0;border-radi
       <button class="btn primary" id="batchBtn" style="width:100%;margin-top:8px">Pick pieces for batch</button>
     </div>
   </section>
-  <section><p class="hint">Everything stays on your phone. Nothing is uploaded. <span style="opacity:.6">Version 20</span></p></section>
+  <section><p class="hint">Everything stays on your phone. Nothing is uploaded. <span style="opacity:.6">Version 21</span></p></section>
 </div>
 </main>
 
@@ -233,7 +235,7 @@ const SCENES = [
   ['custom','My photo'],['frame','Framed on wall'],['dark','Dark room glow'],['phone','Phone screen'],['galaxy','Galaxy Ultra'],
   ['gallery','Gallery'],['poster','Taped poster'],['desk','Desk print'],['tablet','Tablet'],['laptop','Laptop'],['monitor','Desktop monitor'],['shirt','T-shirt'],['mug','Mug'],['tote','Tote bag'],['clean','Clean border']
 ];
-const DEFAULTS = {scene:'frame',format:'ig45',wall:'auto',frame:'black',border:'auto',garment:'auto',tilt:true,
+const DEFAULTS = {scene:'frame',format:'ig45',wall:'auto',frame:'black',border:'auto',garment:'auto',quality:'hi',tilt:true,
   title:'',blend:0.3,subject:'auto',batchMode:'carousel',capPlat:'ig',capStyle:'glitch',capApp:'Glitchlab',capMood:'',capCta:'save',capTagPlace:'caption',capAbout:'on',artSize:1,fillScreen:true,sig:true,sigText:'Nowhingness',sigStyle:'caps',sigPos:'br',zoom:2.5,focus:{x:.5,y:.5},pan:{x:.5,y:.5}};
 let state = Object.assign({}, DEFAULTS);
 try{ const s = JSON.parse(localStorage.getItem('nw-mockup-settings')||'null'); if(s) Object.assign(state, s, {focus:{x:.5,y:.5},pan:{x:.5,y:.5}}); }catch(e){}
@@ -950,7 +952,7 @@ function tri(ctx,img,s0,s1,s2,d0,d1,d2,pad){
 
 /* ---------- render ---------- */
 function render(canvas,scene,fmt,maxPx){
-  const F=FORMATS[fmt], s=maxPx?Math.min(1,maxPx/Math.max(F.w,F.h)):1;
+  const F=FORMATS[fmt], s=maxPx?Math.min(1,maxPx/Math.max(F.w,F.h)):(state.quality==='std'?1:2);
   canvas.width=Math.round(F.w*s); canvas.height=Math.round(F.h*s);
   const ctx=canvas.getContext('2d'); S=s;
   ctx.setTransform(s,0,0,s,0,0); ctx.imageSmoothingEnabled=true; ctx.imageSmoothingQuality='high';
@@ -963,6 +965,7 @@ function render(canvas,scene,fmt,maxPx){
 const $=id=>document.getElementById(id);
 let raf=0;
 function refresh(){
+  try{ qualityHint(); }catch(e){}
   cancelAnimationFrame(raf);
   raf=requestAnimationFrame(()=>{
     document.querySelectorAll('.row[data-for]').forEach(r=>{ r.style.display = r.dataset.for.split(',').includes(state.scene)?'':'none'; });
@@ -1003,6 +1006,10 @@ function chips(el,items,key){
 }
 chips($('sceneChips'),SCENES,'scene');
 chips($('formatChips'),Object.entries(FORMATS).map(([k,v])=>[k,v.label]),'format');
+chips($('qualityChips'),[['hi','High (2×)'],['std','Standard']],'quality');
+function qualityHint(){ const F=FORMATS[state.format], k=state.quality==='std'?1:2;
+  $('qualityHint').textContent=`Saves at ${F.w*k} × ${F.h*k} px`+(k>1?'. Sharper art and crisper detail; Instagram still shows it up to 1080 wide, but uploads from a bigger file look cleaner.':'. Smaller files, quicker to save.'); }
+qualityHint();
 chips($('wallChips'),[['auto','Auto'],['light','Light'],['warm','Warm'],['dark','Dark']],'wall');
 chips($('frameChips'),[['black','Black'],['white','White'],['oak','Oak'],['none','None']],'frame');
 chips($('borderChips'),[['auto','Auto'],['white','White'],['black','Black'],['colour','From art']],'border');
