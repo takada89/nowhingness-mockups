@@ -195,7 +195,7 @@ textarea{width:100%;min-height:170px;background:var(--chip);border:0;border-radi
       <button class="btn primary" id="batchBtn" style="width:100%;margin-top:8px">Pick pieces for batch</button>
     </div>
   </section>
-  <section><p class="hint">Everything stays on your phone. Nothing is uploaded. <span style="opacity:.6">Version 18</span></p></section>
+  <section><p class="hint">Everything stays on your phone. Nothing is uploaded. <span style="opacity:.6">Version 19</span></p></section>
 </div>
 </main>
 
@@ -339,10 +339,36 @@ function signature(ctx,W,H,color,opts={}){
   if(state.sigStyle==='caps'){ size=u*0.022; ctx.font=`600 ${size}px system-ui,-apple-system,"Segoe UI",Roboto,sans-serif`; text=text.toUpperCase().split('').join('  '); }
   else if(state.sigStyle==='script'){ size=u*0.038; ctx.font=`italic ${size}px Georgia,"Times New Roman",serif`; }
   else { size=u*0.026; ctx.font=`500 ${size}px ui-monospace,Menlo,Consolas,monospace`; text='// '+text.toLowerCase(); }
-  const y=opts.y ?? (H-m);
-  if(pos==='bc'||opts.center){ctx.textAlign='center';ctx.fillText(text,opts.x??W/2,y);}
-  else if(pos==='bl'){ctx.textAlign='left';ctx.fillText(text,opts.x??m,y);}
-  else {ctx.textAlign='right';ctx.fillText(text,opts.x??W-m,y);}
+  // Where to write it: the chosen spot first; if art, a device or a prop is under it, try other clear spots
+  const tw=ctx.measureText(text).width, base={pos:opts.center?'bc':pos,x:opts.x,y:opts.y ?? (H-m)};
+  const cands=[base];
+  if(!opts.fixed){
+    const order = base.pos==='bl'?['bl','bc','br']:base.pos==='br'?['br','bc','bl']:['bc','br','bl'];
+    for(const yy of [H-m, H-m*0.45]) for(const q of order) cands.push({pos:q,y:yy});
+    for(const q of order) cands.push({pos:q,y:m+size});
+  }
+  const xOf=c=>c.x ?? (c.pos==='bc'?W/2:c.pos==='bl'?m:W-m);
+  const look=c=>{                                      // how busy the background is under the text (0 = plain)
+    try{
+      const x=xOf(c), x0=c.pos==='bc'?x-tw/2:c.pos==='bl'?x:x-tw, T=ctx.getTransform();
+      const px0=Math.max(0,Math.floor(T.a*(x0-size*0.4)+T.e)), py0=Math.max(0,Math.floor(T.d*(c.y-size*1.05)+T.f));
+      const px1=Math.min(ctx.canvas.width,Math.ceil(T.a*(x0+tw+size*0.4)+T.e)), py1=Math.min(ctx.canvas.height,Math.ceil(T.d*(c.y+size*0.35)+T.f));
+      if(px1-px0<2||py1-py0<2) return {sd:999,lum:0};
+      const d=ctx.getImageData(px0,py0,px1-px0,py1-py0).data; let n=0,sum=0,sq=0,trans=0;
+      for(let i=0;i<d.length;i+=8){ if(d[i+3]<200){ trans++; continue; } const l=.3*d[i]+.59*d[i+1]+.11*d[i+2]; n++; sum+=l; sq+=l*l; }
+      if(!n||trans>n) return {sd:999,lum:0};
+      const mean=sum/n; return {sd:Math.sqrt(Math.max(0,sq/n-mean*mean)),lum:mean/255};
+    }catch(e){ return {sd:0,lum:.5}; }
+  };
+  let best=base, bestL=null;
+  if(!opts.fixed){
+    for(const c of cands){ const L=look(c); if(!bestL||L.sd<bestL.sd-0.5){ best=c; bestL=L; } if(L.sd<9) { best=c; bestL=L; break; } }
+    if(best!==base) ctx.fillStyle = bestL.lum>0.55 ? 'rgba(25,25,28,.72)' : 'rgba(255,255,255,.85)';
+    if(bestL && bestL.sd>=9){ ctx.shadowColor='rgba(0,0,0,.55)'; ctx.shadowBlur=size*0.6*S; }
+  }
+  const x=xOf(best);
+  ctx.textAlign = best.pos==='bc'?'center':best.pos==='bl'?'left':'right';
+  ctx.fillText(text,x,best.y);
   ctx.restore();
 }
 
@@ -700,13 +726,13 @@ const DRAW = {
     const r=fit(ART.w,ART.h,W-2*m,H-2*m-sigSpace), x=(W-r.w)/2, y=(H-sigSpace-r.h)/2;
     ctx.save(); if(lum(bg)>0.5) shadow(ctx,u*0.02,0,u*0.008,'rgba(0,0,0,.18)'); ctx.fillStyle='#000'; ctx.fillRect(x,y,r.w,r.h); noShadow(ctx);
     art(ctx,x,y,r.w,r.h); ctx.restore();
-    signature(ctx,W,H,sigOn(bg),{y:y+r.h+sigSpace*0.72,pos:state.sigPos,x:state.sigPos==='bl'?x:state.sigPos==='br'?x+r.w:W/2});
+    signature(ctx,W,H,sigOn(bg),{y:y+r.h+sigSpace*0.72,pos:state.sigPos,x:state.sigPos==='bl'?x:state.sigPos==='br'?x+r.w:W/2,fixed:true});
   },
   detail(ctx,W,H){
     drawCover(ctx,ART.img,ART.w,ART.h,0,0,W,H,state.focus.x,state.focus.y,state.zoom);
     const g=ctx.createLinearGradient(0,H*0.8,0,H); g.addColorStop(0,'rgba(0,0,0,0)'); g.addColorStop(1,'rgba(0,0,0,.35)');
     ctx.fillStyle=g; ctx.fillRect(0,H*0.8,W,H*0.2);
-    signature(ctx,W,H,'rgba(255,255,255,.88)');
+    signature(ctx,W,H,'rgba(255,255,255,.88)',{fixed:true});
   }
 };
 
