@@ -4,7 +4,7 @@ A mockup maker that runs in your phone's browser. Pick a piece from your gallery
 
 ## What it does
 
-- **10 scenes, all drawn in code** (no stock photos, so there are no licence issues): Framed on wall, Dark room glow, Phone screen, Gallery (with a wall label), Taped poster, Desk print, Tablet, Laptop, Desktop monitor, Clean border.
+- **14 scenes, all drawn in code** (no stock photos, so there are no licence issues): Framed on wall, Dark room glow, Phone screen, Galaxy Ultra (with S Pen), Gallery (with a wall label), Taped poster, Desk print, Tablet, Laptop, Desktop monitor, T-shirt, Mug (art wraps around the curve), Tote bag, Clean border. Products have a colour choice (Auto, White, Black, From art).
 - **Art size slider** makes the piece bigger or smaller in any scene.
 - **Device screens are filled by default.** Drag the preview to choose which part of the art shows. The phone turns sideways for landscape art. Switch off "Fill the screen" to show the whole piece instead.
 - **4 sizes:** Instagram 4:5 (1080×1350), Square (1080×1080), Story/Reel (1080×1920), Twitter/X 16:9 (1600×900).
